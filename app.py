@@ -43,7 +43,17 @@ from shapely.geometry import LineString, Point
 from streamlit_folium import st_folium
 
 if flow_cfs and flow_cfs > 0:
-    flow_cfm = flow_cfs * 60
+    # User input: estimated flow loss per mile
+    loss_percent = st.number_input(
+        "Estimated flow loss per mile (%)",
+        min_value=0.0,
+        max_value=100.0,
+        value=0.5,
+        step=0.1,
+        format="%.2f"
+    )
+    loss_rate = loss_percent / 100.0
+    flow_cfm_initial = flow_cfs * 60
     # Fetch Cumberland River path from OSM Overpass API
     st.info("Loading real Cumberland River path from OpenStreetMap...")
     overpass_url = "https://overpass-api.de/api/interpreter"
@@ -89,7 +99,7 @@ if flow_cfs and flow_cfs > 0:
     marker_lats = [p.y for p in marker_points]
     marker_lons = [p.x for p in marker_points]
     marker_miles = list(range(n_markers+1))
-    map_df = pd.DataFrame({"lat": marker_lats, "lon": marker_lons, "Mile Marker": marker_miles, "CFM": [flow_cfm]*(n_markers+1)})
+    map_df = pd.DataFrame({"lat": marker_lats, "lon": marker_lons, "Mile Marker": marker_miles})
 
     st.subheader("Enter Your Location (Latitude and Longitude)")
     user_lat = st.number_input("Your Latitude", value=marker_lats[0], format="%.6f")
@@ -104,19 +114,37 @@ if flow_cfs and flow_cfs > 0:
     nearest_lon = marker_lons[min_idx]
 
     st.success(f"Nearest Mile Marker: {nearest_marker} (Lat: {nearest_lat:.5f}, Lon: {nearest_lon:.5f})")
-    st.info(f"Estimated Flow Rate at Your Location: {flow_cfm:,} CFM")
+    cfm_at_user = int(flow_cfm_initial * ((1 - loss_rate) ** nearest_marker))
+    st.info(f"Estimated Flow Rate at Your Location: {cfm_at_user:,} CFM")
 
     # Plot with folium for better OSM visualization
     m = folium.Map(location=[marker_lats[0], marker_lons[0]], zoom_start=11, tiles="OpenStreetMap")
     folium.PolyLine(list(zip(marker_lats, marker_lons)), color="blue", weight=3, tooltip="Cumberland River").add_to(m)
     for idx, (lat, lon, mile) in enumerate(zip(marker_lats, marker_lons, marker_miles)):
         if mile in mile_markers:
-            folium.Marker(
-                [lat, lon],
-                tooltip=f"Mile {mile}",
-                popup=f"Mile {mile}<br>CFM: {flow_cfm:,}"
+            cfm_at_mile = int(flow_cfm_initial * ((1 - loss_rate) ** mile))
+            folium.CircleMarker(
+                location=[lat, lon],
+                radius=6,
+                color="green",
+                fill=True,
+                fill_color="green",
+                fill_opacity=0.8,
+                tooltip=f"Mile {mile}<br>CFM: {cfm_at_mile:,}<br>Lat: {lat:.5f}<br>Lon: {lon:.5f}",
+                popup=f"Mile {mile}<br>CFM: {cfm_at_mile:,}"
             ).add_to(m)
-    folium.Marker([user_lat, user_lon], tooltip="Your Location", popup="Your Location").add_to(m)
+    # Calculate flow at user's location (nearest mile marker)
+    cfm_at_user = int(flow_cfm_initial * ((1 - loss_rate) ** nearest_marker))
+    folium.CircleMarker(
+        location=[user_lat, user_lon],
+        radius=8,
+        color="red",
+        fill=True,
+        fill_color="red",
+        fill_opacity=0.9,
+        tooltip=f"Your Location: {cfm_at_user:,} CFM",
+        popup=f"Your Location<br>CFM: {cfm_at_user:,}"
+    ).add_to(m)
     st.subheader("Map of Cumberland River, Mile Markers, and Your Location")
     st_folium(m, width=700, height=500)
     st.caption("River path and markers from OpenStreetMap. For high-precision work, use official TVA or GIS data.")
