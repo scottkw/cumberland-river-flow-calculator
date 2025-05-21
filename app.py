@@ -130,8 +130,7 @@ if flow_cfs and flow_cfs > 0:
                 fill=True,
                 fill_color="green",
                 fill_opacity=0.8,
-                tooltip=f"Mile {mile}<br>CFM: {cfm_at_mile:,}<br>Lat: {lat:.5f}<br>Lon: {lon:.5f}",
-                popup=f"Mile {mile}<br>CFM: {cfm_at_mile:,}"
+                tooltip=f"Mile {mile}<br>CFM: {cfm_at_mile:,}<br>Lat: {lat:.5f}<br>Lon: {lon:.5f}"
             ).add_to(m)
     # Calculate flow at user's location (nearest mile marker)
     cfm_at_user = int(flow_cfm_initial * ((1 - loss_rate) ** nearest_marker))
