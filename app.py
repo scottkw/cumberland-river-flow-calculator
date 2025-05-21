@@ -23,18 +23,15 @@ if flow_cfs == 0:
     st.warning("Please enter a valid discharge value to proceed.")
 
 
-# User input: mile markers
-default_markers = list(range(1, 31))
-markers = st.text_input(
-    "Enter mile markers downstream (comma-separated, e.g. 1,5,10,15):",
-    value=", ".join(str(m) for m in default_markers),
+# User input: max mile marker
+max_mile_marker = st.number_input(
+    "Enter the maximum mile marker downstream from the dam:",
+    min_value=1,
+    value=30,
+    step=1,
+    format="%d"
 )
-try:
-    mile_markers = [int(m.strip()) for m in markers.split(",") if m.strip()]
-    mile_markers = sorted(set(mile_markers))
-except Exception:
-    st.error("Invalid mile marker input. Please enter comma-separated integers.")
-    mile_markers = default_markers
+mile_markers = list(range(0, max_mile_marker + 1))
 
 import pandas as pd
 import numpy as np
@@ -47,12 +44,6 @@ from streamlit_folium import st_folium
 
 if flow_cfs and flow_cfs > 0:
     flow_cfm = flow_cfs * 60
-    st.subheader("CFM at Each Mile Marker (Assuming Constant Flow)")
-    st.write("(CFM = CFS × 60; actual flow may vary due to tributaries, withdrawals, etc.)")
-    data = pd.DataFrame({"Mile Marker": mile_markers, "CFM": [flow_cfm]*len(mile_markers)})
-    st.dataframe(data)
-    st.line_chart(data, x="Mile Marker", y="CFM")
-
     # Fetch Cumberland River path from OSM Overpass API
     st.info("Loading real Cumberland River path from OpenStreetMap...")
     overpass_url = "https://overpass-api.de/api/interpreter"
@@ -120,8 +111,12 @@ if flow_cfs and flow_cfs > 0:
     folium.PolyLine(list(zip(marker_lats, marker_lons)), color="blue", weight=3, tooltip="Cumberland River").add_to(m)
     for idx, (lat, lon, mile) in enumerate(zip(marker_lats, marker_lons, marker_miles)):
         if mile in mile_markers:
-            folium.Marker([lat, lon], tooltip=f"Mile {mile}", icon=folium.Icon(color="green", icon="info-sign")).add_to(m)
-    folium.Marker([user_lat, user_lon], tooltip="Your Location", icon=folium.Icon(color="red")).add_to(m)
+            folium.Marker(
+                [lat, lon],
+                tooltip=f"Mile {mile}",
+                popup=f"Mile {mile}<br>CFM: {flow_cfm:,}"
+            ).add_to(m)
+    folium.Marker([user_lat, user_lon], tooltip="Your Location", popup="Your Location").add_to(m)
     st.subheader("Map of Cumberland River, Mile Markers, and Your Location")
     st_folium(m, width=700, height=500)
     st.caption("River path and markers from OpenStreetMap. For high-precision work, use official TVA or GIS data.")
