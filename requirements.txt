@@ -6,4 +6,5 @@ shapely
 geopandas
 folium
 streamlit-folium
+bs4
 
