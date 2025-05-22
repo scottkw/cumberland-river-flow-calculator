@@ -120,15 +120,6 @@ if flow_cfs and flow_cfs > 0:
     # Plot with folium for better OSM visualization
     m = folium.Map(location=[marker_lats[0], marker_lons[0]], zoom_start=11, tiles="OpenStreetMap")
     folium.PolyLine(list(zip(marker_lats, marker_lons)), color="blue", weight=3, tooltip="Cumberland River").add_to(m)
-    # --- Mark the selected dam ---
-    selected_dam_name = "Old Hickory Dam"
-    dam_lat = 36.288333
-    dam_lon = -86.645278
-    folium.Marker(
-        location=[dam_lat, dam_lon],
-        icon=folium.Icon(color="blue", icon="info-sign"),
-        tooltip=f"{selected_dam_name}\nLat: {dam_lat:.5f}\nLon: {dam_lon:.5f}"
-    ).add_to(m)
     for idx, (lat, lon, mile) in enumerate(zip(marker_lats, marker_lons, marker_miles)):
         if mile in mile_markers:
             cfm_at_mile = int(flow_cfm_initial * ((1 - loss_rate) ** mile))
@@ -144,14 +135,14 @@ if flow_cfs and flow_cfs > 0:
     # Calculate flow at user's location (nearest mile marker)
     cfm_at_user = int(flow_cfm_initial * ((1 - loss_rate) ** nearest_marker))
     folium.CircleMarker(
-        location=[user_lat, user_lon],
+        location=[nearest_lat, nearest_lon],
         radius=8,
         color="red",
         fill=True,
         fill_color="red",
         fill_opacity=0.9,
-        tooltip=f"Your Location: {cfm_at_user:,} CFM",
-        popup=f"Your Location<br>CFM: {cfm_at_user:,}"
+        tooltip=f"Old Hickory Dam\nLat: {nearest_lat:.5f}\nLon: {nearest_lon:.5f}",
+        popup=f"Old Hickory Dam<br>Lat: {nearest_lat:.5f}<br>Lon: {nearest_lon:.5f}"
     ).add_to(m)
     st.subheader("Map of Cumberland River, Mile Markers, Dam, and Your Location")
     st_folium(m, width=700, height=500)
