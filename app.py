@@ -136,7 +136,7 @@ if flow_cfs and flow_cfs > 0:
             ).add_to(m)
     # Calculate flow at user's location (nearest mile marker)
     cfm_at_user = int(flow_cfm_initial * ((1 - loss_rate) ** nearest_marker))
-    dam_popup_content = f"<pre style='white-space: pre; font-family: monospace; min-width: 400px; width: 400px;'>Old Hickory Dam<br>Lat: {nearest_lat:.5f}<br>Lon: {nearest_lon:.5f}</pre>"
+    dam_popup_content = f"<pre style='white-space: pre; font-family: monospace; min-width: 300px; width: 400px;'>Old Hickory Dam<br>Lat: {nearest_lat:.5f}<br>Lon: {nearest_lon:.5f}</pre>"
     folium.CircleMarker(
         location=[nearest_lat, nearest_lon],
         radius=8,
@@ -148,7 +148,7 @@ if flow_cfs and flow_cfs > 0:
         popup=folium.Popup(dam_popup_content, max_width=300)
     ).add_to(m)
     st.subheader("Map of Cumberland River, Mile Markers, and Dam Location")
-    st_folium(m, width=700, height=1000)
+    st_folium(m, width=700, height=700)
     st.caption("River path, markers, and dam from OpenStreetMap and Wikipedia. For high-precision work, use official TVA or GIS data.")
 else:
     st.warning("Flow data unavailable; cannot compute CFM at mile markers.")
