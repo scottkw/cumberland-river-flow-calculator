@@ -120,6 +120,15 @@ if flow_cfs and flow_cfs > 0:
     # Plot with folium for better OSM visualization
     m = folium.Map(location=[marker_lats[0], marker_lons[0]], zoom_start=11, tiles="OpenStreetMap")
     folium.PolyLine(list(zip(marker_lats, marker_lons)), color="blue", weight=3, tooltip="Cumberland River").add_to(m)
+    # --- Mark the selected dam ---
+    selected_dam_name = "Old Hickory Dam"
+    dam_lat = 36.288333
+    dam_lon = -86.645278
+    folium.Marker(
+        location=[dam_lat, dam_lon],
+        icon=folium.Icon(color="blue", icon="info-sign"),
+        tooltip=f"{selected_dam_name}\nLat: {dam_lat:.5f}\nLon: {dam_lon:.5f}"
+    ).add_to(m)
     for idx, (lat, lon, mile) in enumerate(zip(marker_lats, marker_lons, marker_miles)):
         if mile in mile_markers:
             cfm_at_mile = int(flow_cfm_initial * ((1 - loss_rate) ** mile))
@@ -130,7 +139,7 @@ if flow_cfs and flow_cfs > 0:
                 fill=True,
                 fill_color="green",
                 fill_opacity=0.8,
-                tooltip=f"Mile {mile}<br>CFM: {cfm_at_mile:,}<br>Lat: {lat:.5f}<br>Lon: {lon:.5f}"
+                tooltip=f"Mile {mile}\nLat: {lat:.5f}\nLon: {lon:.5f}\nCFM: {cfm_at_mile:,}"
             ).add_to(m)
     # Calculate flow at user's location (nearest mile marker)
     cfm_at_user = int(flow_cfm_initial * ((1 - loss_rate) ** nearest_marker))
@@ -144,8 +153,8 @@ if flow_cfs and flow_cfs > 0:
         tooltip=f"Your Location: {cfm_at_user:,} CFM",
         popup=f"Your Location<br>CFM: {cfm_at_user:,}"
     ).add_to(m)
-    st.subheader("Map of Cumberland River, Mile Markers, and Your Location")
+    st.subheader("Map of Cumberland River, Mile Markers, Dam, and Your Location")
     st_folium(m, width=700, height=500)
-    st.caption("River path and markers from OpenStreetMap. For high-precision work, use official TVA or GIS data.")
+    st.caption("River path, markers, and dam from OpenStreetMap and Wikipedia. For high-precision work, use official TVA or GIS data.")
 else:
     st.warning("Flow data unavailable; cannot compute CFM at mile markers.")
