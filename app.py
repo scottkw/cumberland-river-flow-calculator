@@ -129,7 +129,7 @@ if flow_cfs and flow_cfs > 0:
             arrival_time = now + datetime.timedelta(hours=travel_time_hr)
             cfm_at_mile = int(flow_cfm_initial * ((1 - loss_rate) ** mile))
             popup_content = (
-                f"<pre style='white-space: pre; font-family: monospace; min-width: 150px; width: 220px;'>"
+                f"<pre style='white-space: pre; font-family: monospace; min-width: 220px; width: 340px;'>"
                 f"Mile {mile}<br>Lat: {lat:.5f}<br>Lon: {lon:.5f}<br>Arrival: {arrival_time.strftime('%Y-%m-%d %H:%M:%S')}<br>CFM: {cfm_at_mile:,}"
                 f"</pre>"
             )
@@ -140,13 +140,13 @@ if flow_cfs and flow_cfs > 0:
                 fill=True,
                 fill_color="green",
                 fill_opacity=0.8,
-                tooltip=folium.Tooltip(popup_content, sticky=True, direction='right', permanent=False, max_width=220),
-                popup=folium.Popup(popup_content, max_width=220)
+                tooltip=folium.Tooltip(popup_content, sticky=True, direction='right', permanent=False, max_width=340),
+                popup=folium.Popup(popup_content, max_width=340)
             ).add_to(m)
     # Calculate flow at user's location (nearest mile marker)
     cfm_at_user = int(flow_cfm_initial * ((1 - loss_rate) ** nearest_marker))
     dam_popup_content = (
-        f"<pre style='white-space: pre; font-family: monospace; min-width: 150px; width: 220px;'>"
+        f"<pre style='white-space: pre; font-family: monospace; min-width: 220px; width: 340px;'>"
         f"Old Hickory Dam<br>Lat: {nearest_lat:.5f}<br>Lon: {nearest_lon:.5f}<br>Time: {now.strftime('%Y-%m-%d %H:%M:%S')}"
         f"</pre>"
     )
@@ -157,8 +157,8 @@ if flow_cfs and flow_cfs > 0:
         fill=True,
         fill_color="red",
         fill_opacity=0.9,
-        tooltip=folium.Tooltip(dam_popup_content, sticky=True, direction='right', permanent=False, max_width=220),
-        popup=folium.Popup(dam_popup_content, max_width=220)
+        tooltip=folium.Tooltip(dam_popup_content, sticky=True, direction='right', permanent=False, max_width=340),
+        popup=folium.Popup(dam_popup_content, max_width=340)
     ).add_to(m)
     st.subheader("Map of Cumberland River, Mile Markers, and Dam Location")
     st_folium(m, width=700, height=700)
