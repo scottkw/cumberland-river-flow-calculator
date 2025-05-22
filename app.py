@@ -120,10 +120,19 @@ if flow_cfs and flow_cfs > 0:
     # Plot with folium for better OSM visualization
     m = folium.Map(location=[marker_lats[0], marker_lons[0]], zoom_start=11, tiles="OpenStreetMap")
     folium.PolyLine(list(zip(marker_lats, marker_lons)), color="blue", weight=3, tooltip="Cumberland River").add_to(m)
+    import datetime
+    river_velocity_mph = 2.5  # Assumed average river velocity
+    now = datetime.datetime.strptime("2025-05-22 13:50:43", "%Y-%m-%d %H:%M:%S")
     for idx, (lat, lon, mile) in enumerate(zip(marker_lats, marker_lons, marker_miles)):
         if mile in mile_markers:
+            travel_time_hr = mile / river_velocity_mph
+            arrival_time = now + datetime.timedelta(hours=travel_time_hr)
             cfm_at_mile = int(flow_cfm_initial * ((1 - loss_rate) ** mile))
-            popup_content = f"<pre style='white-space: pre; font-family: monospace; min-width: 150px; width: 220px;'>Mile {mile}<br>Lat: {lat:.5f}<br>Lon: {lon:.5f}<br>CFM: {cfm_at_mile:,}</pre>"
+            popup_content = (
+                f"<pre style='white-space: pre; font-family: monospace; min-width: 150px; width: 220px;'>"
+                f"Mile {mile}<br>Lat: {lat:.5f}<br>Lon: {lon:.5f}<br>Arrival: {arrival_time.strftime('%Y-%m-%d %H:%M:%S')}<br>CFM: {cfm_at_mile:,}"
+                f"</pre>"
+            )
             folium.CircleMarker(
                 location=[lat, lon],
                 radius=6,
@@ -136,7 +145,11 @@ if flow_cfs and flow_cfs > 0:
             ).add_to(m)
     # Calculate flow at user's location (nearest mile marker)
     cfm_at_user = int(flow_cfm_initial * ((1 - loss_rate) ** nearest_marker))
-    dam_popup_content = f"<pre style='white-space: pre; font-family: monospace; min-width: 150px; width: 220px;'>Old Hickory Dam<br>Lat: {nearest_lat:.5f}<br>Lon: {nearest_lon:.5f}</pre>"
+    dam_popup_content = (
+        f"<pre style='white-space: pre; font-family: monospace; min-width: 150px; width: 220px;'>"
+        f"Old Hickory Dam<br>Lat: {nearest_lat:.5f}<br>Lon: {nearest_lon:.5f}<br>Time: {now.strftime('%Y-%m-%d %H:%M:%S')}"
+        f"</pre>"
+    )
     folium.CircleMarker(
         location=[nearest_lat, nearest_lon],
         radius=8,
