@@ -145,10 +145,10 @@ if flow_cfs and flow_cfs > 0:
         fill_color="red",
         fill_opacity=0.9,
         tooltip=folium.Tooltip(dam_popup_content, sticky=True, direction='right', permanent=False, max_width=2000),
-        popup=folium.Popup(dam_popup_content, max_width=500)
+        popup=folium.Popup(dam_popup_content, max_width=300)
     ).add_to(m)
     st.subheader("Map of Cumberland River, Mile Markers, and Dam Location")
-    st_folium(m, width=700, height=500)
+    st_folium(m, width=700, height=300)
     st.caption("River path, markers, and dam from OpenStreetMap and Wikipedia. For high-precision work, use official TVA or GIS data.")
 else:
     st.warning("Flow data unavailable; cannot compute CFM at mile markers.")
