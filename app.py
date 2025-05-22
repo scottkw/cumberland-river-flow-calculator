@@ -1,6 +1,8 @@
 import streamlit as st
 import requests
 from bs4 import BeautifulSoup
+import pandas as pd
+import re
 
 st.set_page_config(page_title="Old Hickory Dam Flow Rates", layout="centered")
 st.title("Old Hickory Dam - Downstream Flow Calculator")
@@ -113,9 +115,54 @@ if flow_cfs and flow_cfs > 0:
     nearest_lat = marker_lats[min_idx]
     nearest_lon = marker_lons[min_idx]
 
-    st.success(f"Nearest Mile Marker: {nearest_marker} (Lat: {nearest_lat:.5f}, Lon: {nearest_lon:.5f})")
-    cfm_at_user = int(flow_cfm_initial * ((1 - loss_rate) ** nearest_marker))
-    st.info(f"Estimated Flow Rate at Your Location: {cfm_at_user:,} CFM")
+# --- Fetch dams from Wikipedia ---
+def fetch_cumberland_dams():
+    url = "https://en.wikipedia.org/wiki/Cumberland_River"
+    tables = pd.read_html(url, flavor='bs4')
+    dams = []
+    for df in tables:
+        cols = [c.lower() for c in df.columns.astype(str)]
+        if any('dam' in c for c in cols) and any('coordinate' in c for c in cols):
+            for _, row in df.iterrows():
+                name = str(row[0])
+                coord_str = ''
+                for val in row:
+                    if isinstance(val, str) and (re.search(r'\d+\.\d+;? ?[−\-]?\d+\.\d+', val) or '°' in val):
+                        coord_str = val
+                        break
+                # Try to extract decimal coordinates
+                m = re.search(r'([−\-]?\d+\.\d+)\D+([−\-]?\d+\.\d+)', coord_str)
+                if m:
+                    lat = float(m.group(1).replace('−', '-'))
+                    lon = float(m.group(2).replace('−', '-'))
+                    dams.append({"name": name, "lat": lat, "lon": lon})
+            break
+    # Sort dams from upstream to downstream by latitude (approx)
+    dams.sort(key=lambda d: -d["lat"])
+    return dams
+
+dams = fetch_cumberland_dams()
+if not dams:
+    st.error("Could not fetch dam data from Wikipedia.")
+    st.stop()
+
+# --- Dam selection UI ---
+dam_names = [d["name"] for d in dams]
+default_index = 0
+selected_dam_name = st.selectbox("Choose starting dam:", dam_names, index=default_index)
+selected_dam_idx = dam_names.index(selected_dam_name)
+selected_dam = dams[selected_dam_idx]
+
+# Limit max mile marker to next dam downstream (if any)
+if selected_dam_idx < len(dams) - 1:
+    next_dam = dams[selected_dam_idx + 1]
+    max_mile_allowed = abs(selected_dam["lat"] - next_dam["lat"]) * 69  # crude miles between latitudes
+else:
+    max_mile_allowed = 30  # default if last dam
+
+st.success(f"Nearest Mile Marker: {nearest_marker} (Lat: {nearest_lat:.5f}, Lon: {nearest_lon:.5f})")
+cfm_at_user = int(flow_cfm_initial * ((1 - loss_rate) ** nearest_marker))
+st.info(f"Estimated Flow Rate at Your Location: {cfm_at_user:,} CFM")
 
     # Plot with folium for better OSM visualization
     m = folium.Map(location=[marker_lats[0], marker_lons[0]], zoom_start=11, tiles="OpenStreetMap")
@@ -123,8 +170,11 @@ if flow_cfs and flow_cfs > 0:
     import datetime
     river_velocity_mph = 2.5  # Assumed average river velocity
     now = datetime.datetime.strptime("2025-05-22 13:50:43", "%Y-%m-%d %H:%M:%S")
+    # Use selected dam as starting point for calculations
+    dam_lat = selected_dam["lat"]
+    dam_lon = selected_dam["lon"]
     for idx, (lat, lon, mile) in enumerate(zip(marker_lats, marker_lons, marker_miles)):
-        if mile in mile_markers:
+        if mile in mile_markers and mile <= max_mile_allowed:
             travel_time_hr = mile / river_velocity_mph
             arrival_time = now + datetime.timedelta(hours=travel_time_hr)
             cfm_at_mile = int(flow_cfm_initial * ((1 - loss_rate) ** mile))
@@ -147,11 +197,11 @@ if flow_cfs and flow_cfs > 0:
     cfm_at_user = int(flow_cfm_initial * ((1 - loss_rate) ** nearest_marker))
     dam_popup_content = (
         f"<pre style='white-space: pre; font-family: monospace; min-width: 220px; width: 340px;'>"
-        f"Old Hickory Dam<br>Lat: {nearest_lat:.5f}<br>Lon: {nearest_lon:.5f}<br>Time: {now.strftime('%Y-%m-%d %H:%M:%S')}"
+        f"{selected_dam['name']}<br>Lat: {dam_lat:.5f}<br>Lon: {dam_lon:.5f}<br>Time: {now.strftime('%Y-%m-%d %H:%M:%S')}"
         f"</pre>"
     )
     folium.CircleMarker(
-        location=[nearest_lat, nearest_lon],
+        location=[dam_lat, dam_lon],
         radius=8,
         color="red",
         fill=True,
