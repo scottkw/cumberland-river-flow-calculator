@@ -213,5 +213,3 @@ folium.CircleMarker(
 st.subheader("Map of Cumberland River, Mile Markers, and Dam Location")
 st_folium(m, width=700, height=700)
 st.caption("River path, markers, and dam from OpenStreetMap and Wikipedia. For high-precision work, use official TVA or GIS data.")
-else:
-    st.warning("Flow data unavailable; cannot compute CFM at mile markers.")
