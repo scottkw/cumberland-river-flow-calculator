@@ -123,7 +123,7 @@ if flow_cfs and flow_cfs > 0:
     for idx, (lat, lon, mile) in enumerate(zip(marker_lats, marker_lons, marker_miles)):
         if mile in mile_markers:
             cfm_at_mile = int(flow_cfm_initial * ((1 - loss_rate) ** mile))
-            popup_content = f"<pre style='white-space: pre; font-family: monospace; min-width: 400px; width: 400px;'>Mile {mile}\nLat: {lat:.5f}\nLon: {lon:.5f}\nCFM: {cfm_at_mile:,}</pre>"
+            popup_content = f"<pre style='white-space: pre; font-family: monospace; min-width: 400px; width: 400px;'>Mile {mile}<br>Lat: {lat:.5f}<br>Lon: {lon:.5f}<br>CFM: {cfm_at_mile:,}</pre>"
             folium.CircleMarker(
                 location=[lat, lon],
                 radius=6,
@@ -132,11 +132,11 @@ if flow_cfs and flow_cfs > 0:
                 fill_color="green",
                 fill_opacity=0.8,
                 tooltip=folium.Tooltip(popup_content, sticky=True, direction='right', permanent=False, max_width=2000),
-                popup=folium.Popup(popup_content, max_width=2000)
+                popup=folium.Popup(popup_content, max_width=500)
             ).add_to(m)
     # Calculate flow at user's location (nearest mile marker)
     cfm_at_user = int(flow_cfm_initial * ((1 - loss_rate) ** nearest_marker))
-    dam_popup_content = f"<pre style='white-space: pre; font-family: monospace; min-width: 400px; width: 400px;'>Old Hickory Dam\nLat: {nearest_lat:.5f}\nLon: {nearest_lon:.5f}</pre>"
+    dam_popup_content = f"<pre style='white-space: pre; font-family: monospace; min-width: 400px; width: 400px;'>Old Hickory Dam<br>Lat: {nearest_lat:.5f}<br>Lon: {nearest_lon:.5f}</pre>"
     folium.CircleMarker(
         location=[nearest_lat, nearest_lon],
         radius=8,
@@ -145,9 +145,9 @@ if flow_cfs and flow_cfs > 0:
         fill_color="red",
         fill_opacity=0.9,
         tooltip=folium.Tooltip(dam_popup_content, sticky=True, direction='right', permanent=False, max_width=2000),
-        popup=folium.Popup(dam_popup_content, max_width=2000)
+        popup=folium.Popup(dam_popup_content, max_width=500)
     ).add_to(m)
-    st.subheader("Map of Cumberland River, Mile Markers, Dam, and Your Location")
+    st.subheader("Map of Cumberland River, Mile Markers, and Dam Location")
     st_folium(m, width=700, height=500)
     st.caption("River path, markers, and dam from OpenStreetMap and Wikipedia. For high-precision work, use official TVA or GIS data.")
 else:
