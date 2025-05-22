@@ -7,4 +7,5 @@ geopandas
 folium
 streamlit-folium
 bs4
+html5lib
 
