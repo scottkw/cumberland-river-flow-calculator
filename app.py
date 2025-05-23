@@ -134,56 +134,56 @@ if flow_cfs and flow_cfs > 0:
     nearest_lon = marker_lons[min_idx]
 
 
-st.success(f"Nearest Mile Marker: {nearest_marker} (Lat: {nearest_lat:.5f}, Lon: {nearest_lon:.5f})")
-cfm_at_user = int(flow_cfm_initial * ((1 - loss_rate) ** nearest_marker))
-st.info(f"Estimated Flow Rate at Your Location: {cfm_at_user:,} CFM")
+    st.success(f"Nearest Mile Marker: {nearest_marker} (Lat: {nearest_lat:.5f}, Lon: {nearest_lon:.5f})")
+    cfm_at_user = int(flow_cfm_initial * ((1 - loss_rate) ** nearest_marker))
+    st.info(f"Estimated Flow Rate at Your Location: {cfm_at_user:,} CFM")
 
-# Plot with folium for better OSM visualization
-m = folium.Map(location=[marker_lats[0], marker_lons[0]], zoom_start=11, tiles="OpenStreetMap")
-folium.PolyLine(list(zip(marker_lats, marker_lons)), color="blue", weight=3, tooltip="Cumberland River").add_to(m)
-import datetime
-river_velocity_mph = 2.5  # Assumed average river velocity
-now = datetime.datetime.strptime("2025-05-22 13:50:43", "%Y-%m-%d %H:%M:%S")
-# Use selected dam as starting point for calculations
-dam_lat = selected_dam["lat"]
-dam_lon = selected_dam["lon"]
-for idx, (lat, lon, mile) in enumerate(zip(marker_lats, marker_lons, marker_miles)):
-    if mile in mile_markers and mile <= max_mile_allowed:
-        travel_time_hr = mile / river_velocity_mph
-        arrival_time = now + datetime.timedelta(hours=travel_time_hr)
-        cfm_at_mile = int(flow_cfm_initial * ((1 - loss_rate) ** mile))
-        popup_content = (
-            f"<pre style='white-space: pre; font-family: monospace; min-width: 220px; width: 340px;'>"
-            f"Mile {mile}<br>Lat: {lat:.5f}<br>Lon: {lon:.5f}<br>Arrival: {arrival_time.strftime('%Y-%m-%d %H:%M:%S')}<br>CFM: {cfm_at_mile:,}"
-            f"</pre>"
-        )
-        folium.CircleMarker(
-            location=[lat, lon],
-            radius=6,
-            color="green",
-            fill=True,
-            fill_color="green",
-            fill_opacity=0.8,
-            tooltip=folium.Tooltip(popup_content, sticky=True, direction='right', permanent=False, max_width=340),
-            popup=folium.Popup(popup_content, max_width=340)
-        ).add_to(m)
-# Calculate flow at user's location (nearest mile marker)
-cfm_at_user = int(flow_cfm_initial * ((1 - loss_rate) ** nearest_marker))
-dam_popup_content = (
-    f"<pre style='white-space: pre; font-family: monospace; min-width: 220px; width: 340px;'>"
-    f"{selected_dam['name']}<br>Lat: {dam_lat:.5f}<br>Lon: {dam_lon:.5f}<br>Time: {now.strftime('%Y-%m-%d %H:%M:%S')}"
-    f"</pre>"
-)
-folium.CircleMarker(
-    location=[dam_lat, dam_lon],
-    radius=8,
-    color="red",
-    fill=True,
-    fill_color="red",
-    fill_opacity=0.9,
-    tooltip=folium.Tooltip(dam_popup_content, sticky=True, direction='right', permanent=False, max_width=340),
-    popup=folium.Popup(dam_popup_content, max_width=340)
-).add_to(m)
-st.subheader("Map of Cumberland River, Mile Markers, and Dam Location")
-st_folium(m, width=700, height=700)
-st.caption("River path, markers, and dam from OpenStreetMap and Wikipedia. For high-precision work, use official TVA or GIS data.")
+    # Plot with folium for better OSM visualization
+    m = folium.Map(location=[marker_lats[0], marker_lons[0]], zoom_start=11, tiles="OpenStreetMap")
+    folium.PolyLine(list(zip(marker_lats, marker_lons)), color="blue", weight=3, tooltip="Cumberland River").add_to(m)
+    import datetime
+    river_velocity_mph = 2.5  # Assumed average river velocity
+    now = datetime.datetime.strptime("2025-05-22 13:50:43", "%Y-%m-%d %H:%M:%S")
+    # Use selected dam as starting point for calculations
+    dam_lat = selected_dam["lat"]
+    dam_lon = selected_dam["lon"]
+    for idx, (lat, lon, mile) in enumerate(zip(marker_lats, marker_lons, marker_miles)):
+        if mile in mile_markers and mile <= max_mile_allowed:
+            travel_time_hr = mile / river_velocity_mph
+            arrival_time = now + datetime.timedelta(hours=travel_time_hr)
+            cfm_at_mile = int(flow_cfm_initial * ((1 - loss_rate) ** mile))
+            popup_content = (
+                f"<pre style='white-space: pre; font-family: monospace; min-width: 220px; width: 340px;'>"
+                f"Mile {mile}<br>Lat: {lat:.5f}<br>Lon: {lon:.5f}<br>Arrival: {arrival_time.strftime('%Y-%m-%d %H:%M:%S')}<br>CFM: {cfm_at_mile:,}"
+                f"</pre>"
+            )
+            folium.CircleMarker(
+                location=[lat, lon],
+                radius=6,
+                color="green",
+                fill=True,
+                fill_color="green",
+                fill_opacity=0.8,
+                tooltip=folium.Tooltip(popup_content, sticky=True, direction='right', permanent=False, max_width=340),
+                popup=folium.Popup(popup_content, max_width=340)
+            ).add_to(m)
+    # Calculate flow at user's location (nearest mile marker)
+    cfm_at_user = int(flow_cfm_initial * ((1 - loss_rate) ** nearest_marker))
+    dam_popup_content = (
+        f"<pre style='white-space: pre; font-family: monospace; min-width: 220px; width: 340px;'>"
+        f"{selected_dam['name']}<br>Lat: {dam_lat:.5f}<br>Lon: {dam_lon:.5f}<br>Time: {now.strftime('%Y-%m-%d %H:%M:%S')}"
+        f"</pre>"
+    )
+    folium.CircleMarker(
+        location=[dam_lat, dam_lon],
+        radius=8,
+        color="red",
+        fill=True,
+        fill_color="red",
+        fill_opacity=0.9,
+        tooltip=folium.Tooltip(dam_popup_content, sticky=True, direction='right', permanent=False, max_width=340),
+        popup=folium.Popup(dam_popup_content, max_width=340)
+    ).add_to(m)
+    st.subheader("Map of Cumberland River, Mile Markers, and Dam Location")
+    st_folium(m, width=700, height=700)
+    st.caption("River path, markers, and dam from OpenStreetMap and Wikipedia. For high-precision work, use official TVA or GIS data.")
