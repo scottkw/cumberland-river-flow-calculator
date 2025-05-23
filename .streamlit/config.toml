@@ -4,11 +4,7 @@ primaryColor = "#2b7a78"              # Teal blue (water)
 backgroundColor = "#eaf6fb"           # Light blue (sky/water)
 secondaryBackgroundColor = "#e3d9ca"  # Sandy tan (shore)
 textColor = "#183446"                 # Deep blue (depth, fish)
-font = "sans serif"
-
-[theme]
-# Accent colors for fishing lures or highlights
 accentColor = "#ffa500"                # Orange (lure/accent)
-
+font = "sans serif"
 # Optional: add a logo (if you have one)
 # logo = "https://yourdomain.com/logo.png"
