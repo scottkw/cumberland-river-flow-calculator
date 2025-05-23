@@ -77,8 +77,10 @@ if flow_cfs and flow_cfs > 0:
     # Fetch Cumberland River path from OSM Overpass API
     st.info("Loading real Cumberland River path from OpenStreetMap...")
     overpass_url = "https://overpass-api.de/api/interpreter"
-    # The OSM 'way' for the Cumberland River below Old Hickory Dam, bounding box for ~30 miles downstream
-    bbox = [36.05, -86.8, 36.32, -86.6]  # south, west, north, east
+    # Dynamically set bounding box: center on selected dam, extend downstream ~0.3 deg lat, 0.2 deg lon
+    dam_lat = selected_dam["lat"]
+    dam_lon = selected_dam["lon"]
+    bbox = [dam_lat - 0.3, dam_lon - 0.2, dam_lat + 0.1, dam_lon + 0.2]  # south, west, north, east
     query = f"""
     [out:json][timeout:25];
     (
@@ -106,20 +108,20 @@ if flow_cfs and flow_cfs > 0:
             river_line = river_line.union(l)
         if river_line.geom_type == 'MultiLineString':
             river_line = max(river_line.geoms, key=lambda g: g.length)
+        # Find the point on the river line nearest the selected dam
+        dam_point = Point(dam_lon, dam_lat)
+        start_dist = river_line.project(dam_point)
+        # Interpolate mile markers starting from the selected dam
+        n_markers = max(mile_markers)
+        distances = [start_dist + (river_line.length - start_dist) * (i / n_markers) for i in range(n_markers + 1)]
+        marker_points = [river_line.interpolate(d) for d in distances]
+        marker_lats = [p.y for p in marker_points]
+        marker_lons = [p.x for p in marker_points]
+        marker_miles = list(range(n_markers + 1))
+        map_df = pd.DataFrame({"lat": marker_lats, "lon": marker_lons, "Mile Marker": marker_miles})
     except Exception as e:
         st.error(f"Error loading river geometry from OSM: {e}")
         st.stop()
-
-    # Interpolate mile markers along river path
-    river_length_m = river_line.length * 111139  # degrees to meters (approx, latitude)
-    river_length_miles = river_length_m / 1609.34
-    n_markers = max(mile_markers)
-    distances = np.linspace(0, river_line.length, n_markers+1)
-    marker_points = [river_line.interpolate(d) for d in distances]
-    marker_lats = [p.y for p in marker_points]
-    marker_lons = [p.x for p in marker_points]
-    marker_miles = list(range(n_markers+1))
-    map_df = pd.DataFrame({"lat": marker_lats, "lon": marker_lons, "Mile Marker": marker_miles})
 
     st.subheader("Enter Your Location (Latitude and Longitude)")
     user_lat = st.number_input("Your Latitude", value=marker_lats[0], format="%.6f")
