@@ -133,23 +133,6 @@ if flow_cfs and flow_cfs > 0:
     nearest_lat = marker_lats[min_idx]
     nearest_lon = marker_lons[min_idx]
 
-# --- Load dams from static JSON file ---
-import json
-with open("cumberland_dams.json", "r") as f:
-    dams = json.load(f)
-if not dams:
-    st.error("Could not load dam data from cumberland_dams.json.")
-    st.stop()
-# Sort dams from upstream to downstream by river mile (descending)
-dams.sort(key=lambda d: -d["river_mile"])
-
-# --- Dam selection UI ---
-dam_names = [d["name"] for d in dams]
-default_index = 0
-selected_dam_name = st.selectbox("Choose starting dam:", dam_names, index=default_index)
-selected_dam_idx = dam_names.index(selected_dam_name)
-selected_dam = dams[selected_dam_idx]
-
 # Limit max mile marker to next dam downstream (if any), using river mile
 if selected_dam_idx < len(dams) - 1:
     next_dam = dams[selected_dam_idx + 1]
