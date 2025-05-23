@@ -35,10 +35,12 @@ st.markdown(f"""
 st.title("Cumberland River Downstream Flow Calculator")
 
 st.markdown("""
-**Instructions:**
-- Retrieve the "Average Hourly Discharge" (in CFS) from the [TVA Old Hickory Dam lake levels page](https://www.tva.com/environment/lake-levels/Old-Hickory).
-- Enter it below to calculate the flow rates at each mile marker downstream.
-""")
+<span style='font-size: 1rem;'>
+<strong>Instructions:</strong><br>
+Retrieve the "Average Hourly Discharge" (in CFS) from the <a href="https://www.tva.com/environment/lake-levels/Old-Hickory" target="_blank">TVA Old Hickory Dam lake levels page</a>.<br>
+Enter it below to calculate the flow rates at each mile marker downstream.
+</span>
+""", unsafe_allow_html=True)
 
 # --- Load dams from static JSON file and select dam before any calculations ---
 import json
@@ -50,36 +52,86 @@ if not dams:
 dams.sort(key=lambda d: -d["river_mile"])
 dam_names = [d["name"] for d in dams]
 default_index = 0
-selected_dam_name = st.selectbox("Choose starting dam:", dam_names, index=default_index, key="dam_selectbox")
-selected_dam_idx = dam_names.index(selected_dam_name)
-selected_dam = dams[selected_dam_idx]
-if selected_dam_idx < len(dams) - 1:
-    next_dam = dams[selected_dam_idx + 1]
-    max_mile_allowed = selected_dam["river_mile"] - next_dam["river_mile"]
-else:
-    max_mile_allowed = selected_dam["river_mile"]  # allow up to river mouth
 
-# User input: Average Hourly Discharge (CFS)
-flow_cfs = st.number_input(
-    "Average Hourly Discharge (CFS - Cubic Feet per Second):",
-    min_value=0,
-    value=0,
-    step=1,
-    format="%d"
-)
+# Arrange form elements in a grid (2 columns on desktop, stack on mobile)
+with st.container():
+    col1, col2 = st.columns(2)
+    with col1:
+        selected_dam_name = st.selectbox(
+            "Starting dam",
+            dam_names,
+            index=default_index,
+            key="dam_selectbox",
+            help="Choose the dam to start calculations from."
+        )
+    with col2:
+        flow_cfs = st.number_input(
+            "Discharge (CFS)",
+            min_value=0,
+            value=0,
+            step=1,
+            format="%d",
+            help="Average Hourly Discharge in Cubic Feet per Second."
+        )
+    selected_dam_idx = dam_names.index(selected_dam_name)
+    selected_dam = dams[selected_dam_idx]
+    if selected_dam_idx < len(dams) - 1:
+        next_dam = dams[selected_dam_idx + 1]
+        max_mile_allowed = selected_dam["river_mile"] - next_dam["river_mile"]
+    else:
+        max_mile_allowed = selected_dam["river_mile"]  # allow up to river mouth
+
+    col3, col4 = st.columns(2)
+    with col3:
+        max_mile_marker = st.number_input(
+            "Max mile marker",
+            min_value=1,
+            value=min(30, int(max_mile_allowed)),
+            max_value=int(max_mile_allowed),
+            step=1,
+            format="%d",
+            help=f"Maximum mile marker downstream from the dam (max {int(max_mile_allowed)})."
+        )
+    with col4:
+        # Only show loss_percent if flow_cfs > 0
+        if flow_cfs > 0:
+            loss_percent = st.number_input(
+                "Loss per mile (%)",
+                min_value=0.0,
+                max_value=100.0,
+                value=0.5,
+                step=0.1,
+                format="%.2f",
+                help="Estimated flow loss per mile as a percent."
+            )
+        else:
+            loss_percent = 0.5
+
+mile_markers = list(range(0, max_mile_marker + 1))
+
+# Compact input style for all widgets
+st.markdown("""
+    <style>
+    .stNumberInput, .stSelectbox, .stTextInput, .stSlider, .stButton, .stTextArea {
+        max-width: 100%;
+        font-size: 1rem;
+        padding: 0.2rem 0.5rem;
+        margin-bottom: 0.3rem;
+    }
+    /* Make columns tighter */
+    section[data-testid="column"] {
+        gap: 0.1rem !important;
+        min-width: 0 !important;
+    }
+    /* Reduce padding on container */
+    [data-testid="stAppViewContainer"] > .main {
+        padding-top: 0.5rem;
+    }
+    </style>
+""", unsafe_allow_html=True)
+
 if flow_cfs == 0:
     st.warning("Please enter a valid discharge value to proceed.")
-
-# User input: max mile marker (limit to max_mile_allowed)
-max_mile_marker = st.number_input(
-    f"Enter the maximum mile marker downstream from the dam (max {int(max_mile_allowed)}):",
-    min_value=1,
-    value=min(30, int(max_mile_allowed)),
-    max_value=int(max_mile_allowed),
-    step=1,
-    format="%d"
-)
-mile_markers = list(range(0, max_mile_marker + 1))
 
 import numpy as np
 import requests
