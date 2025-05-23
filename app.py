@@ -4,8 +4,8 @@ from bs4 import BeautifulSoup
 import pandas as pd
 import re
 
-st.set_page_config(page_title="Old Hickory Dam Flow Rates", layout="centered")
-st.title("Old Hickory Dam - Downstream Flow Calculator")
+st.set_page_config(page_title="Cumberland River Flow Rates", layout="centered")
+st.title("Cumberland River Downstream Flow Calculator")
 
 st.markdown("""
 **Instructions:**
