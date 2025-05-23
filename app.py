@@ -7,9 +7,30 @@ import os
 
 st.set_page_config(page_title="Cumberland River Flow Rates", layout="centered")
 
-# Inject custom CSS for faded background image
-with open(os.path.join("background_style.css")) as f:
-    st.markdown(f"<style>{f.read()}</style>", unsafe_allow_html=True)
+# Inject custom CSS for faded background image using base64-encoded image
+from utils import get_img_as_base64
+img_path = "img/james-wheeler-HJhGcU_IbsQ-unsplash.jpg"
+img_base64 = get_img_as_base64(img_path)
+st.markdown(f"""
+    <style>
+    [data-testid="stAppViewContainer"]::before {{
+        content: "";
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100vw;
+        height: 100vh;
+        background: url('data:image/jpeg;base64,{img_base64}') center/cover no-repeat;
+        opacity: 0.55; /* fade overlay */
+        z-index: 0;
+        pointer-events: none;
+    }}
+    [data-testid="stAppViewContainer"] > * {{
+        position: relative;
+        z-index: 1;
+    }}
+    </style>
+""", unsafe_allow_html=True)
 
 st.title("Cumberland River Downstream Flow Calculator")
 
