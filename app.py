@@ -115,36 +115,15 @@ if flow_cfs and flow_cfs > 0:
     nearest_lat = marker_lats[min_idx]
     nearest_lon = marker_lons[min_idx]
 
-# --- Fetch dams from Wikipedia ---
-def fetch_cumberland_dams():
-    url = "https://en.wikipedia.org/wiki/Cumberland_River"
-    tables = pd.read_html(url, flavor='bs4')
-    dams = []
-    for df in tables:
-        cols = [c.lower() for c in df.columns.astype(str)]
-        if any('dam' in c for c in cols) and any('coordinate' in c for c in cols):
-            for _, row in df.iterrows():
-                name = str(row[0])
-                coord_str = ''
-                for val in row:
-                    if isinstance(val, str) and (re.search(r'\d+\.\d+;? ?[−\-]?\d+\.\d+', val) or '°' in val):
-                        coord_str = val
-                        break
-                # Try to extract decimal coordinates
-                m = re.search(r'([−\-]?\d+\.\d+)\D+([−\-]?\d+\.\d+)', coord_str)
-                if m:
-                    lat = float(m.group(1).replace('−', '-'))
-                    lon = float(m.group(2).replace('−', '-'))
-                    dams.append({"name": name, "lat": lat, "lon": lon})
-            break
-    # Sort dams from upstream to downstream by latitude (approx)
-    dams.sort(key=lambda d: -d["lat"])
-    return dams
-
-dams = fetch_cumberland_dams()
+# --- Load dams from static JSON file ---
+import json
+with open("cumberland_dams.json", "r") as f:
+    dams = json.load(f)
 if not dams:
-    st.error("Could not fetch dam data from Wikipedia.")
+    st.error("Could not load dam data from cumberland_dams.json.")
     st.stop()
+# Sort dams from upstream to downstream by river mile (descending)
+dams.sort(key=lambda d: -d["river_mile"])
 
 # --- Dam selection UI ---
 dam_names = [d["name"] for d in dams]
@@ -153,12 +132,12 @@ selected_dam_name = st.selectbox("Choose starting dam:", dam_names, index=defaul
 selected_dam_idx = dam_names.index(selected_dam_name)
 selected_dam = dams[selected_dam_idx]
 
-# Limit max mile marker to next dam downstream (if any)
+# Limit max mile marker to next dam downstream (if any), using river mile
 if selected_dam_idx < len(dams) - 1:
     next_dam = dams[selected_dam_idx + 1]
-    max_mile_allowed = abs(selected_dam["lat"] - next_dam["lat"]) * 69  # crude miles between latitudes
+    max_mile_allowed = selected_dam["river_mile"] - next_dam["river_mile"]
 else:
-    max_mile_allowed = 30  # default if last dam
+    max_mile_allowed = selected_dam["river_mile"]  # allow up to river mouth
 
 st.success(f"Nearest Mile Marker: {nearest_marker} (Lat: {nearest_lat:.5f}, Lon: {nearest_lon:.5f})")
 cfm_at_user = int(flow_cfm_initial * ((1 - loss_rate) ** nearest_marker))
