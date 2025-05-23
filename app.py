@@ -59,8 +59,9 @@ else:
 
 # Arrange form elements in a grid (3 columns on desktop, stack on mobile)
 with st.container():
-    col1, col2, col3 = st.columns(3)
-    with col1:
+    # First row: dam, discharge, max mile marker
+    row1_col1, row1_col2, row1_col3 = st.columns(3)
+    with row1_col1:
         selected_dam_name = st.selectbox(
             "Starting dam",
             dam_names,
@@ -68,8 +69,7 @@ with st.container():
             key="dam_selectbox",
             help="Choose the dam to start calculations from."
         )
-        max_mile_allowed = 0  # will be set below
-    with col2:
+    with row1_col2:
         flow_cfs = st.number_input(
             "Discharge (CFS)",
             min_value=0,
@@ -78,16 +78,7 @@ with st.container():
             format="%d",
             help="Average Hourly Discharge in Cubic Feet per Second."
         )
-        loss_percent = st.number_input(
-            "Loss per mile (%)",
-            min_value=0.0,
-            max_value=100.0,
-            value=0.5,
-            step=0.1,
-            format="%.2f",
-            help="Estimated flow loss per mile as a percent."
-        )
-    with col3:
+    with row1_col3:
         # Set selected dam and max mile allowed
         selected_dam_idx = dam_names.index(selected_dam_name)
         selected_dam = dams[selected_dam_idx]
@@ -105,12 +96,26 @@ with st.container():
             format="%d",
             help=f"Maximum mile marker downstream from the dam (max {int(max_mile_allowed)})."
         )
+    # Second row: loss per mile, latitude, longitude
+    row2_col1, row2_col2, row2_col3 = st.columns(3)
+    with row2_col1:
+        loss_percent = st.number_input(
+            "Loss per mile (%)",
+            min_value=0.0,
+            max_value=100.0,
+            value=0.5,
+            step=0.1,
+            format="%.2f",
+            help="Estimated flow loss per mile as a percent."
+        )
+    with row2_col2:
         user_lat = st.number_input(
             "Your Latitude",
             value=selected_dam.get("lat", 36.2912),
             format="%.6f",
             help="Enter your latitude (decimal degrees)."
         )
+    with row2_col3:
         user_lon = st.number_input(
             "Your Longitude",
             value=selected_dam.get("lon", -86.6515),
