@@ -161,7 +161,7 @@ if flow_cfs and flow_cfs > 0:
     loss_rate = loss_percent / 100.0
     flow_cfm_initial = flow_cfs * 60
     # Fetch Cumberland River path from OSM Overpass API
-    st.info("Loading real Cumberland River path from OpenStreetMap...")
+    # st.info("Loading real Cumberland River path from OpenStreetMap...")  # Hidden
     overpass_url = "https://overpass-api.de/api/interpreter"
     # Dynamically set bounding box: center on selected dam, extend downstream ~0.3 deg lat, 0.2 deg lon
     dam_lat = selected_dam["lat"]
@@ -218,9 +218,9 @@ if flow_cfs and flow_cfs > 0:
     nearest_lon = marker_lons[min_idx]
 
 
-    st.success(f"Nearest Mile Marker: {nearest_marker} (Lat: {nearest_lat:.5f}, Lon: {nearest_lon:.5f})")
+    # st.success(f"Nearest Mile Marker: {nearest_marker} (Lat: {nearest_lat:.5f}, Lon: {nearest_lon:.5f})")  # Hidden
     cfm_at_user = int(flow_cfm_initial * ((1 - loss_rate) ** nearest_marker))
-    st.info(f"Estimated Flow Rate at Your Location: {cfm_at_user:,} CFM")
+    # st.info(f"Estimated Flow Rate at Your Location: {cfm_at_user:,} CFM")  # Hidden
 
     # Plot with folium for better OSM visualization
     m = folium.Map(location=[marker_lats[0], marker_lons[0]], zoom_start=11, tiles="OpenStreetMap")
