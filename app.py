@@ -7,6 +7,12 @@ import re
 st.set_page_config(page_title="Old Hickory Dam Flow Rates", layout="centered")
 st.title("Old Hickory Dam - Downstream Flow Calculator")
 
+st.markdown("""
+**Instructions:**
+- Retrieve the "Average Hourly Discharge" (in CFS) from the [TVA Old Hickory Dam lake levels page](https://www.tva.com/environment/lake-levels/Old-Hickory).
+- Enter it below to calculate the flow rates at each mile marker downstream.
+""")
+
 # --- Load dams from static JSON file and select dam before any calculations ---
 import json
 with open("cumberland_dams.json", "r") as f:
@@ -17,7 +23,7 @@ if not dams:
 dams.sort(key=lambda d: -d["river_mile"])
 dam_names = [d["name"] for d in dams]
 default_index = 0
-selected_dam_name = st.selectbox("Choose starting dam:", dam_names, index=default_index)
+selected_dam_name = st.selectbox("Choose starting dam:", dam_names, index=default_index, key="dam_selectbox")
 selected_dam_idx = dam_names.index(selected_dam_name)
 selected_dam = dams[selected_dam_idx]
 if selected_dam_idx < len(dams) - 1:
@@ -25,12 +31,6 @@ if selected_dam_idx < len(dams) - 1:
     max_mile_allowed = selected_dam["river_mile"] - next_dam["river_mile"]
 else:
     max_mile_allowed = selected_dam["river_mile"]  # allow up to river mouth
-
-st.markdown("""
-**Instructions:**
-- Retrieve the "Average Hourly Discharge" (in CFS) from the [TVA Old Hickory Dam lake levels page](https://www.tva.com/environment/lake-levels/Old-Hickory).
-- Enter it below to calculate the flow rates at each mile marker downstream.
-""")
 
 # User input: Average Hourly Discharge (CFS)
 flow_cfs = st.number_input(
