@@ -158,15 +158,6 @@ from shapely.geometry import LineString, Point
 from streamlit_folium import st_folium
 
 if flow_cfs and flow_cfs > 0:
-    # User input: estimated flow loss per mile
-    loss_percent = st.number_input(
-        "Estimated flow loss per mile (%)",
-        min_value=0.0,
-        max_value=100.0,
-        value=0.5,
-        step=0.1,
-        format="%.2f"
-    )
     loss_rate = loss_percent / 100.0
     flow_cfm_initial = flow_cfs * 60
     # Fetch Cumberland River path from OSM Overpass API
@@ -217,10 +208,6 @@ if flow_cfs and flow_cfs > 0:
     except Exception as e:
         st.error(f"Error loading river geometry from OSM: {e}")
         st.stop()
-
-    st.subheader("Enter Your Location (Latitude and Longitude)")
-    user_lat = st.number_input("Your Latitude", value=marker_lats[0], format="%.6f")
-    user_lon = st.number_input("Your Longitude", value=marker_lons[0], format="%.6f")
 
     # Find nearest point on river and river mile
     user_point = Point(user_lon, user_lat)
