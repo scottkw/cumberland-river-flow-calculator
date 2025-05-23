@@ -133,12 +133,6 @@ if flow_cfs and flow_cfs > 0:
     nearest_lat = marker_lats[min_idx]
     nearest_lon = marker_lons[min_idx]
 
-# Limit max mile marker to next dam downstream (if any), using river mile
-if selected_dam_idx < len(dams) - 1:
-    next_dam = dams[selected_dam_idx + 1]
-    max_mile_allowed = selected_dam["river_mile"] - next_dam["river_mile"]
-else:
-    max_mile_allowed = selected_dam["river_mile"]  # allow up to river mouth
 
 st.success(f"Nearest Mile Marker: {nearest_marker} (Lat: {nearest_lat:.5f}, Lon: {nearest_lon:.5f})")
 cfm_at_user = int(flow_cfm_initial * ((1 - loss_rate) ** nearest_marker))
