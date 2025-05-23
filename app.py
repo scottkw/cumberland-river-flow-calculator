@@ -5,11 +5,12 @@ import pandas as pd
 import re
 import os
 
+st.set_page_config(page_title="Cumberland River Flow Rates", layout="centered")
+
 # Inject custom CSS for faded background image
 with open(os.path.join("background_style.css")) as f:
     st.markdown(f"<style>{f.read()}</style>", unsafe_allow_html=True)
 
-st.set_page_config(page_title="Cumberland River Flow Rates", layout="centered")
 st.title("Cumberland River Downstream Flow Calculator")
 
 st.markdown("""
