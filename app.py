@@ -7,6 +7,25 @@ import re
 st.set_page_config(page_title="Old Hickory Dam Flow Rates", layout="centered")
 st.title("Old Hickory Dam - Downstream Flow Calculator")
 
+# --- Load dams from static JSON file and select dam before any calculations ---
+import json
+with open("cumberland_dams.json", "r") as f:
+    dams = json.load(f)
+if not dams:
+    st.error("Could not load dam data from cumberland_dams.json.")
+    st.stop()
+dams.sort(key=lambda d: -d["river_mile"])
+dam_names = [d["name"] for d in dams]
+default_index = 0
+selected_dam_name = st.selectbox("Choose starting dam:", dam_names, index=default_index)
+selected_dam_idx = dam_names.index(selected_dam_name)
+selected_dam = dams[selected_dam_idx]
+if selected_dam_idx < len(dams) - 1:
+    next_dam = dams[selected_dam_idx + 1]
+    max_mile_allowed = selected_dam["river_mile"] - next_dam["river_mile"]
+else:
+    max_mile_allowed = selected_dam["river_mile"]  # allow up to river mouth
+
 st.markdown("""
 **Instructions:**
 - Retrieve the "Average Hourly Discharge" (in CFS) from the [TVA Old Hickory Dam lake levels page](https://www.tva.com/environment/lake-levels/Old-Hickory).
@@ -24,18 +43,17 @@ flow_cfs = st.number_input(
 if flow_cfs == 0:
     st.warning("Please enter a valid discharge value to proceed.")
 
-
-# User input: max mile marker
+# User input: max mile marker (limit to max_mile_allowed)
 max_mile_marker = st.number_input(
-    "Enter the maximum mile marker downstream from the dam:",
+    f"Enter the maximum mile marker downstream from the dam (max {int(max_mile_allowed)}):",
     min_value=1,
-    value=30,
+    value=min(30, int(max_mile_allowed)),
+    max_value=int(max_mile_allowed),
     step=1,
     format="%d"
 )
 mile_markers = list(range(0, max_mile_marker + 1))
 
-import pandas as pd
 import numpy as np
 import requests
 import shapely.geometry
