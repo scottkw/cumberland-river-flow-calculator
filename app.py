@@ -51,11 +51,15 @@ if not dams:
     st.stop()
 dams.sort(key=lambda d: -d["river_mile"])
 dam_names = [d["name"] for d in dams]
-default_index = 0
+# Default to Old Hickory Dam if present
+if "Old Hickory Dam" in dam_names:
+    default_index = dam_names.index("Old Hickory Dam")
+else:
+    default_index = 0
 
-# Arrange form elements in a grid (2 columns on desktop, stack on mobile)
+# Arrange form elements in a grid (3 columns on desktop, stack on mobile)
 with st.container():
-    col1, col2 = st.columns(2)
+    col1, col2, col3 = st.columns(3)
     with col1:
         selected_dam_name = st.selectbox(
             "Starting dam",
@@ -64,25 +68,34 @@ with st.container():
             key="dam_selectbox",
             help="Choose the dam to start calculations from."
         )
+        max_mile_allowed = 0  # will be set below
     with col2:
         flow_cfs = st.number_input(
             "Discharge (CFS)",
             min_value=0,
-            value=0,
+            value=2500,
             step=1,
             format="%d",
             help="Average Hourly Discharge in Cubic Feet per Second."
         )
-    selected_dam_idx = dam_names.index(selected_dam_name)
-    selected_dam = dams[selected_dam_idx]
-    if selected_dam_idx < len(dams) - 1:
-        next_dam = dams[selected_dam_idx + 1]
-        max_mile_allowed = selected_dam["river_mile"] - next_dam["river_mile"]
-    else:
-        max_mile_allowed = selected_dam["river_mile"]  # allow up to river mouth
-
-    col3, col4 = st.columns(2)
+        loss_percent = st.number_input(
+            "Loss per mile (%)",
+            min_value=0.0,
+            max_value=100.0,
+            value=0.5,
+            step=0.1,
+            format="%.2f",
+            help="Estimated flow loss per mile as a percent."
+        )
     with col3:
+        # Set selected dam and max mile allowed
+        selected_dam_idx = dam_names.index(selected_dam_name)
+        selected_dam = dams[selected_dam_idx]
+        if selected_dam_idx < len(dams) - 1:
+            next_dam = dams[selected_dam_idx + 1]
+            max_mile_allowed = selected_dam["river_mile"] - next_dam["river_mile"]
+        else:
+            max_mile_allowed = selected_dam["river_mile"]  # allow up to river mouth
         max_mile_marker = st.number_input(
             "Max mile marker",
             min_value=1,
@@ -92,20 +105,18 @@ with st.container():
             format="%d",
             help=f"Maximum mile marker downstream from the dam (max {int(max_mile_allowed)})."
         )
-    with col4:
-        # Only show loss_percent if flow_cfs > 0
-        if flow_cfs > 0:
-            loss_percent = st.number_input(
-                "Loss per mile (%)",
-                min_value=0.0,
-                max_value=100.0,
-                value=0.5,
-                step=0.1,
-                format="%.2f",
-                help="Estimated flow loss per mile as a percent."
-            )
-        else:
-            loss_percent = 0.5
+        user_lat = st.number_input(
+            "Your Latitude",
+            value=selected_dam.get("lat", 36.2912),
+            format="%.6f",
+            help="Enter your latitude (decimal degrees)."
+        )
+        user_lon = st.number_input(
+            "Your Longitude",
+            value=selected_dam.get("lon", -86.6515),
+            format="%.6f",
+            help="Enter your longitude (decimal degrees)."
+        )
 
 mile_markers = list(range(0, max_mile_marker + 1))
 
