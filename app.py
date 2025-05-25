@@ -594,9 +594,9 @@ class CumberlandRiverFlowCalculator:
             'flow_data_available': flow_data is not None
         }
 
-@st.cache_data
+@st.cache_resource
 def get_calculator():
-    """Cached calculator instance"""
+    """Cached calculator instance - uses cache_resource for non-serializable objects"""
     return CumberlandRiverFlowCalculator()
 
 def create_map(calculator, selected_dam, user_mile):
