@@ -2,11 +2,7 @@ streamlit
 requests
 pandas
 numpy
-shapely
-geopandas
 folium
 streamlit-folium
-bs4
-html5lib
 streamlit_pwa
 
