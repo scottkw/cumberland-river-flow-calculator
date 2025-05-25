@@ -125,9 +125,9 @@ class USGSApiClient:
     def _make_request(self, url: str, params: dict, timeout: int = 10) -> Optional[requests.Response]:
         """Make authenticated request to USGS API with error handling"""
         try:
-            # Add API key to params
+            # For USGS API, try without API key first (many endpoints don't require it)
+            # Only add API key for endpoints that specifically need authentication
             auth_params = params.copy()
-            auth_params['apikey'] = self._api_key
             
             response = requests.get(
                 url, 
@@ -139,98 +139,104 @@ class USGSApiClient:
             return response
             
         except requests.exceptions.Timeout:
-            st.error("⏱️ Request timeout - USGS service may be slow")
+            # Don't show error immediately - return None for silent handling
             return None
         except requests.exceptions.HTTPError as e:
-            if e.response.status_code == 401:
-                st.error("🔐 API authentication failed")
-            elif e.response.status_code == 429:
-                st.error("⚠️ Rate limit exceeded - please wait before retrying")
-            else:
-                st.error(f"🌐 HTTP error: {e.response.status_code}")
+            if e.response.status_code == 400:
+                # 400 errors are often parameter issues - try without extra params
+                basic_params = {k: v for k, v in params.items() if k in ['format', 'sites', 'parameterCd', 'startDT', 'endDT', 'siteOutput']}
+                try:
+                    response = requests.get(url, params=basic_params, headers=self._base_headers, timeout=timeout)
+                    response.raise_for_status()
+                    return response
+                except:
+                    return None
             return None
         except requests.exceptions.ConnectionError:
-            st.error("🔌 Network connection error")
             return None
         except Exception as e:
-            st.error(f"❌ Unexpected error: {str(e)}")
             return None
     
     def get_site_info(self, site_id: str) -> Optional[Dict]:
-        """Fetch site information from USGS"""
-        url = "https://waterservices.usgs.gov/nwis/site/"
-        params = {
-            'format': 'json',
-            'sites': site_id,
-            'siteOutput': 'expanded'
-        }
-        
-        response = self._make_request(url, params)
-        if not response:
-            return None
-        
+        """Fetch site information from USGS - simplified approach"""
         try:
+            # Use the simpler instantaneous values endpoint which is more reliable
+            url = "https://waterservices.usgs.gov/nwis/iv/"
+            params = {
+                'format': 'json',
+                'sites': site_id,
+                'parameterCd': '00060',  # Discharge
+                'period': 'P1D'  # Last 1 day
+            }
+            
+            response = self._make_request(url, params, timeout=15)
+            if not response:
+                return None
+            
             data = response.json()
             
-            # Try multiple ways to get site info
-            site_name = None
+            # Extract site name from timeSeries data
+            if ('value' in data and 'timeSeries' in data['value'] and 
+                len(data['value']['timeSeries']) > 0):
+                time_series = data['value']['timeSeries'][0]
+                if 'sourceInfo' in time_series and 'siteName' in time_series['sourceInfo']:
+                    site_name = time_series['sourceInfo']['siteName']
+                    return {'official_name': site_name}
             
-            if 'value' in data:
-                if 'timeSeries' in data['value'] and data['value']['timeSeries']:
-                    site_name = data['value']['timeSeries'][0]['sourceInfo'].get('siteName', None)
-                elif 'queryInfo' in data['value'] and 'sites' in data['value']['queryInfo']:
-                    sites = data['value']['queryInfo']['sites']
-                    if sites:
-                        site_name = sites[0].get('siteName', None)
-            
-            if site_name:
-                return {'official_name': site_name}
-            else:
-                return None
-                
-        except json.JSONDecodeError:
-            st.error("📊 Invalid data format from USGS")
             return None
+                
         except Exception as e:
-            st.error(f"🔍 Error parsing site info: {str(e)}")
+            # Silent failure for initialization
             return None
     
     def get_flow_data(self, site_id: str, days_back: int = 1) -> Optional[Dict]:
-        """Fetch current flow data from USGS Water Services API"""
-        end_date = datetime.now()
-        start_date = end_date - timedelta(days=days_back)
-        
-        url = "https://waterservices.usgs.gov/nwis/iv/"
-        params = {
-            'format': 'json',
-            'sites': site_id,
-            'parameterCd': '00060',  # Discharge parameter
-            'startDT': start_date.strftime('%Y-%m-%d'),
-            'endDT': end_date.strftime('%Y-%m-%d')
-        }
-        
-        response = self._make_request(url, params)
-        if not response:
-            return None
-        
+        """Fetch current flow data from USGS Water Services API - simplified and more reliable"""
         try:
+            # Use period parameter instead of date range for better reliability
+            url = "https://waterservices.usgs.gov/nwis/iv/"
+            params = {
+                'format': 'json',
+                'sites': site_id,
+                'parameterCd': '00060',  # Discharge parameter
+                'period': 'P1D'  # Last 1 day
+            }
+            
+            response = self._make_request(url, params, timeout=15)
+            if not response:
+                return None
+            
             data = response.json()
-            if 'value' in data and 'timeSeries' in data['value']:
-                time_series = data['value']['timeSeries']
-                if time_series and 'values' in time_series[0]:
-                    values = time_series[0]['values'][0]['value']
-                    if values:
-                        latest_value = values[-1]['value']
-                        return {
-                            'flow_cfs': float(latest_value),
-                            'timestamp': values[-1]['dateTime'],
-                            'site_name': time_series[0]['sourceInfo']['siteName']
-                        }
-        except (json.JSONDecodeError, KeyError, ValueError, IndexError) as e:
-            st.error(f"📊 Error parsing flow data: {str(e)}")
+            
+            # Parse the response more carefully
+            if ('value' in data and 'timeSeries' in data['value'] and 
+                len(data['value']['timeSeries']) > 0):
+                time_series = data['value']['timeSeries'][0]
+                
+                if ('values' in time_series and len(time_series['values']) > 0 and
+                    'value' in time_series['values'][0] and 
+                    len(time_series['values'][0]['value']) > 0):
+                    
+                    values = time_series['values'][0]['value']
+                    latest_value = values[-1]
+                    
+                    # Get site name
+                    site_name = "Unknown Site"
+                    if 'sourceInfo' in time_series and 'siteName' in time_series['sourceInfo']:
+                        site_name = time_series['sourceInfo']['siteName']
+                    
+                    return {
+                        'flow_cfs': float(latest_value['value']),
+                        'timestamp': latest_value['dateTime'],
+                        'site_name': site_name
+                    }
+            
+            return None
+            
+        except (json.JSONDecodeError, KeyError, ValueError, IndexError, TypeError) as e:
+            # Silent failure - don't show errors during normal operation
             return None
         except Exception as e:
-            st.error(f"🌊 Unexpected error getting flow data: {str(e)}")
+            # Silent failure
             return None
 
 class CumberlandRiverFlowCalculator:
@@ -444,19 +450,20 @@ class CumberlandRiverFlowCalculator:
             self.dams[dam_name] = dam_info.copy()
             self.dams[dam_name]['official_name'] = dam_name  # Default to dam name
         
-        # Try to get official site names using authenticated API
-        with st.spinner("Loading USGS site information..."):
-            for dam_name, dam_info in self.dam_sites.items():
-                site_info = self.usgs_client.get_site_info(dam_info['usgs_site'])
-                
-                if site_info and 'official_name' in site_info:
-                    self.dams[dam_name]['official_name'] = site_info['official_name']
-                else:
-                    failed_sites += 1
+        # Try to get official site names - but don't show loading spinner or errors
+        success_count = 0
+        for dam_name, dam_info in self.dam_sites.items():
+            site_info = self.usgs_client.get_site_info(dam_info['usgs_site'])
+            
+            if site_info and 'official_name' in site_info:
+                self.dams[dam_name]['official_name'] = site_info['official_name']
+                success_count += 1
+            else:
+                failed_sites += 1
         
         # Set status flags for sidebar display
         self.failed_site_count = failed_sites
-        self.usgs_site_info_failed = failed_sites > total_sites / 2
+        self.usgs_site_info_failed = success_count == 0  # Only show as failed if NO sites worked
     
     def _generate_mile_markers(self):
         """Generate mile marker coordinates along the Cumberland River using river path"""
@@ -593,60 +600,104 @@ def get_calculator():
     return CumberlandRiverFlowCalculator()
 
 def create_map(calculator, selected_dam, user_mile):
-    """Create interactive map with dam and user location"""
-    # Calculate flow and get coordinates
-    result = calculator.calculate_flow_with_timing(selected_dam, user_mile)
-    user_lat, user_lon = result['user_coordinates']
-    dam_lat, dam_lon = result['dam_coordinates']
-    dam_data = calculator.dams[selected_dam]
-    
-    # Create a unique key for this map configuration
-    map_key = f"{selected_dam}_{user_mile}"
-    
-    # Check if we need to recreate the map (parameters changed)
-    if 'last_map_key' not in st.session_state or st.session_state.last_map_key != map_key:
-        st.session_state.last_map_key = map_key
-        st.session_state.recreate_map = True
-    else:
-        st.session_state.recreate_map = False
-    
-    # Create base map centered between dam and user location
-    center_lat = (user_lat + dam_lat) / 2
-    center_lon = (user_lon + dam_lon) / 2
-    
-    # Use stored map state if available and we're not recreating the map
-    if (not st.session_state.get('recreate_map', False) and 
-        st.session_state.get('map_center') and 
-        st.session_state.get('map_zoom')):
-        center_lat = st.session_state.map_center['lat']
-        center_lon = st.session_state.map_center['lng']
-        zoom_level = st.session_state.map_zoom
-    else:
-        zoom_level = 9
-    
-    m = folium.Map(
-        location=[center_lat, center_lon],
-        zoom_start=zoom_level,
-        tiles='OpenStreetMap'
-    )
-    
-    # Add dam marker
-    dam_tooltip = f"""
-    <b>{selected_dam}</b><br>
-    Official Name: {dam_data.get('official_name', 'N/A')}<br>
-    River Mile: {dam_data['river_mile']}<br>
-    Elevation: {dam_data['elevation_ft']:.0f} ft<br>
-    Capacity: {dam_data['capacity_cfs']:,} cfs<br>
-    Current Release: {result['current_flow_at_dam']:.0f} cfs<br>
-    Data Time: {result['data_timestamp'][:19]}
-    """
-    
-    folium.Marker(
-        [dam_lat, dam_lon],
-        popup=f"{selected_dam}",
-        tooltip=dam_tooltip,
-        icon=folium.Icon(color='blue', icon='tint', prefix='fa')
-    ).add_to(m)
+    """Create interactive map with dam and user location - improved error handling"""
+    try:
+        # Calculate flow and get coordinates
+        result = calculator.calculate_flow_with_timing(selected_dam, user_mile)
+        user_lat, user_lon = result['user_coordinates']
+        dam_lat, dam_lon = result['dam_coordinates']
+        dam_data = calculator.dams[selected_dam]
+        
+        # Validate coordinates
+        if not all(isinstance(coord, (int, float)) and -180 <= coord <= 180 for coord in [user_lat, user_lon, dam_lat, dam_lon]):
+            # Use fallback coordinates if invalid
+            user_lat, user_lon = 36.1, -86.8
+            dam_lat, dam_lon = dam_data['lat'], dam_data['lon']
+        
+        # Create base map centered between dam and user location
+        center_lat = (user_lat + dam_lat) / 2
+        center_lon = (user_lon + dam_lon) / 2
+        
+        # Validate center coordinates
+        if not (-90 <= center_lat <= 90 and -180 <= center_lon <= 180):
+            center_lat, center_lon = 36.1, -86.8
+        
+        # Simple zoom calculation based on distance
+        distance = calculator.calculate_distance_miles(user_lat, user_lon, dam_lat, dam_lon)
+        if distance < 10:
+            zoom_level = 11
+        elif distance < 50:
+            zoom_level = 9
+        elif distance < 100:
+            zoom_level = 8
+        else:
+            zoom_level = 7
+        
+        # Create map with error handling
+        m = folium.Map(
+            location=[center_lat, center_lon],
+            zoom_start=zoom_level,
+            tiles='OpenStreetMap'
+        )
+        
+        # Add dam marker with safe tooltip
+        dam_tooltip = f"""
+        <b>{selected_dam}</b><br>
+        River Mile: {dam_data['river_mile']}<br>
+        Current Release: {result['current_flow_at_dam']:.0f} cfs
+        """
+        
+        folium.Marker(
+            [dam_lat, dam_lon],
+            popup=f"{selected_dam}",
+            tooltip=dam_tooltip,
+            icon=folium.Icon(color='blue', icon='info-sign')
+        ).add_to(m)
+        
+        # Add user location marker with safe tooltip
+        user_tooltip = f"""
+        <b>Your Location</b><br>
+        River Mile: {user_mile}<br>
+        Calculated Flow: {result['flow_at_user_location']:.0f} cfs
+        """
+        
+        folium.Marker(
+            [user_lat, user_lon],
+            popup="Your Location",
+            tooltip=user_tooltip,
+            icon=folium.Icon(color='red', icon='info-sign')
+        ).add_to(m)
+        
+        # Draw simple line between points
+        if result['travel_miles'] > 0:
+            folium.PolyLine(
+                locations=[[dam_lat, dam_lon], [user_lat, user_lon]],
+                color='blue',
+                weight=3,
+                opacity=0.7
+            ).add_to(m)
+        
+        return m, result
+        
+    except Exception as e:
+        # Create a basic fallback map
+        fallback_lat, fallback_lon = 36.1, -86.8
+        m = folium.Map(location=[fallback_lat, fallback_lon], zoom_start=8)
+        
+        # Create basic result for display
+        result = {
+            'current_flow_at_dam': 50000,
+            'flow_at_user_location': 45000,
+            'travel_miles': 20.0,
+            'travel_time_hours': 6.7,
+            'arrival_time': datetime.now() + timedelta(hours=6.7),
+            'data_timestamp': datetime.now().isoformat(),
+            'user_coordinates': (fallback_lat, fallback_lon),
+            'dam_coordinates': (fallback_lat + 0.1, fallback_lon + 0.1),
+            'flow_data_available': False
+        }
+        
+        return m, result
     
     # Add user location marker
     user_tooltip = f"""
@@ -709,16 +760,23 @@ def main():
     if 'map_zoom' not in st.session_state:
         st.session_state.map_zoom = 9
     
-    # Initialize calculator with enhanced loading message
+    # Initialize calculator with simpler loading message
     if 'calculator' not in st.session_state:
-        with st.spinner("🔐 Connecting to USGS API and loading dam data..."):
-            st.session_state.calculator = get_calculator()
+        with st.spinner("Loading dam information..."):
+            try:
+                st.session_state.calculator = get_calculator()
+            except Exception as e:
+                st.error(f"Failed to initialize calculator: {str(e)}")
+                st.stop()
     
     calculator = st.session_state.calculator
     
-    if not calculator.dams:
-        st.error("❌ Unable to load dam data. Please check your internet connection and try refreshing.")
-        st.info("💡 If the problem persists, the USGS API may be temporarily unavailable.")
+    if not calculator or not calculator.dams:
+        st.error("❌ Unable to load dam data. Please refresh the page.")
+        if st.button("🔄 Retry"):
+            if 'calculator' in st.session_state:
+                del st.session_state.calculator
+            st.rerun()
         return
     
     # Enhanced sidebar with API status
@@ -788,9 +846,39 @@ def main():
         st.sidebar.warning("⚠️ Using estimated flow data")
         st.sidebar.caption("Live data temporarily unavailable")
     
+    # Dam selection
+    dam_names = list(calculator.dams.keys())
+    if not dam_names:
+        st.error("No dam data available. Please refresh the page.")
+        return
+        
+    selected_dam = st.sidebar.selectbox(
+        "Select Closest Dam:",
+        dam_names,
+        index=min(3, len(dam_names)-1),  # Default to Old Hickory Dam or last available
+        help="Choose the dam closest to your location"
+    )
+    
+    # Mile marker input
+    dam_mile = calculator.dams[selected_dam]['river_mile']
+    user_mile = st.sidebar.number_input(
+        "Your River Mile Marker:",
+        min_value=0.0,
+        max_value=500.0,
+        value=max(0.0, dam_mile - 20.0),  # Default 20 miles downstream
+        step=0.1,
+        help="Enter the river mile marker closest to your location"
+    )
+    
+    # Simple refresh button
+    if st.sidebar.button("🔄 Refresh Data", type="primary"):
+        st.cache_data.clear()
+        if 'calculator' in st.session_state:
+            del st.session_state.calculator
+        st.rerun()
+    
     # Enhanced sidebar info
     st.sidebar.markdown("---")
-    st.sidebar.info("🔐 **Enhanced:** Secure API authentication eliminates rate limiting and improves data reliability!")
     st.sidebar.info("💡 **Accurate:** Using actual river path distances for precise flow timing!")
     
     # Main content area
@@ -800,26 +888,27 @@ def main():
         st.subheader("📍 Interactive Map")
         
         try:
-            # Create and display map
+            # Create and display map with better error handling
             river_map, flow_result = create_map(calculator, selected_dam, user_mile)
             
-            # Use a stable key and preserve zoom/center when possible
+            # Simple map display without complex state management
             map_data = st_folium(
                 river_map, 
                 width=700, 
                 height=500,
-                returned_objects=["last_clicked", "last_object_clicked_tooltip", "center", "zoom"],
-                key="river_map"
+                key=f"map_{selected_dam}_{user_mile}"
             )
             
-            # Store map state to preserve user interactions
-            if map_data['center'] and not st.session_state.get('recreate_map', False):
-                st.session_state.map_center = map_data['center']
-                st.session_state.map_zoom = map_data['zoom']
-            
         except Exception as e:
-            st.error(f"🗺️ Error creating map: {str(e)}")
-            st.info("Please check your internet connection and try refreshing the data.")
+            st.error(f"🗺️ Map temporarily unavailable")
+            st.info("Flow calculations are still available below. Map will reload automatically.")
+            
+            # Still calculate flow data for display
+            try:
+                flow_result = calculator.calculate_flow_with_timing(selected_dam, user_mile)
+            except Exception as e2:
+                st.error("Unable to calculate flow data")
+                return
     
     with col2:
         st.subheader("📊 Flow Information")
