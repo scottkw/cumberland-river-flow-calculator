@@ -715,23 +715,33 @@ def create_map(calculator, selected_dam, miles_downstream):
         dam_lat, dam_lon = result['dam_coordinates']
         dam_data = calculator.dams[selected_dam]
         
-        # Validate coordinates
-        if not all(isinstance(coord, (int, float)) and -180 <= coord <= 180 for coord in [user_lat, user_lon, dam_lat, dam_lon]):
-            # Use fallback coordinates if invalid
-            user_lat, user_lon = 36.1, -86.8
-            dam_lat, dam_lon = dam_data['lat'], dam_data['lon']
+        # Debug: Validate and log coordinates
+        coords_valid = all(isinstance(coord, (int, float)) and -180 <= coord <= 180 for coord in [user_lat, user_lon, dam_lat, dam_lon])
+        
+        if not coords_valid:
+            # Use dam coordinates as both points if invalid
+            user_lat, user_lon = dam_lat, dam_lon
+        
+        # Ensure coordinates are within reasonable bounds
+        if not (35.0 <= user_lat <= 38.0 and -89.0 <= user_lon <= -84.0):
+            user_lat, user_lon = dam_lat, dam_lon
+        
+        if not (35.0 <= dam_lat <= 38.0 and -89.0 <= dam_lon <= -84.0):
+            dam_lat, dam_lon = 36.1, -86.8  # Nashville area fallback
         
         # Create base map centered between dam and user location
         center_lat = (user_lat + dam_lat) / 2
         center_lon = (user_lon + dam_lon) / 2
         
         # Validate center coordinates
-        if not (-90 <= center_lat <= 90 and -180 <= center_lon <= 180):
+        if not (35.0 <= center_lat <= 38.0 and -89.0 <= center_lon <= -84.0):
             center_lat, center_lon = 36.1, -86.8
         
-        # Simple zoom calculation based on distance
+        # Calculate zoom level based on distance
         distance = calculator.calculate_distance_miles(user_lat, user_lon, dam_lat, dam_lon)
-        if distance < 5:
+        if distance < 1:
+            zoom_level = 13
+        elif distance < 5:
             zoom_level = 12
         elif distance < 15:
             zoom_level = 10
@@ -740,43 +750,45 @@ def create_map(calculator, selected_dam, miles_downstream):
         else:
             zoom_level = 8
         
-        # Create map with error handling
+        # Create map
         m = folium.Map(
             location=[center_lat, center_lon],
             zoom_start=zoom_level,
             tiles='OpenStreetMap'
         )
         
-        # Add dam marker with safe tooltip
+        # Add dam marker - ensure it's always added
         dam_tooltip = f"""
         <b>{selected_dam}</b><br>
+        Lat: {dam_lat:.4f}, Lon: {dam_lon:.4f}<br>
         Current Release: {result['current_flow_at_dam']:.0f} cfs<br>
         You are {miles_downstream:.1f} miles downstream
         """
         
         folium.Marker(
-            [dam_lat, dam_lon],
+            location=[dam_lat, dam_lon],
             popup=f"{selected_dam}",
             tooltip=dam_tooltip,
             icon=folium.Icon(color='blue', icon='info-sign')
         ).add_to(m)
         
-        # Add user location marker with safe tooltip
+        # Add user location marker - ensure it's always added
         user_tooltip = f"""
         <b>Your Location</b><br>
+        Lat: {user_lat:.4f}, Lon: {user_lon:.4f}<br>
         {miles_downstream:.1f} miles downstream from {selected_dam}<br>
         Calculated Flow: {result['flow_at_user_location']:.0f} cfs
         """
         
         folium.Marker(
-            [user_lat, user_lon],
+            location=[user_lat, user_lon],
             popup="Your Location",
             tooltip=user_tooltip,
             icon=folium.Icon(color='red', icon='info-sign')
         ).add_to(m)
         
-        # Draw line showing downstream path
-        if miles_downstream > 0:
+        # Draw line showing downstream path (only if points are different)
+        if miles_downstream > 0 and (abs(user_lat - dam_lat) > 0.001 or abs(user_lon - dam_lon) > 0.001):
             folium.PolyLine(
                 locations=[[dam_lat, dam_lon], [user_lat, user_lon]],
                 color='blue',
@@ -788,20 +800,33 @@ def create_map(calculator, selected_dam, miles_downstream):
         return m, result
         
     except Exception as e:
-        # Create a basic fallback map
-        fallback_lat, fallback_lon = 36.1, -86.8
-        m = folium.Map(location=[fallback_lat, fallback_lon], zoom_start=8)
+        # Create a basic fallback map with guaranteed markers
+        center_lat, center_lon = 36.1, -86.8
+        m = folium.Map(location=[center_lat, center_lon], zoom_start=8)
+        
+        # Add fallback markers
+        folium.Marker(
+            location=[center_lat, center_lon],
+            popup="Error - Dam Location",
+            icon=folium.Icon(color='blue', icon='info-sign')
+        ).add_to(m)
+        
+        folium.Marker(
+            location=[center_lat + 0.1, center_lon - 0.1],
+            popup="Error - User Location",
+            icon=folium.Icon(color='red', icon='info-sign')
+        ).add_to(m)
         
         # Create basic result for display
         result = {
             'current_flow_at_dam': 50000,
             'flow_at_user_location': 45000,
             'travel_miles': miles_downstream,
-            'travel_time_hours': miles_downstream / 3.0,
-            'arrival_time': datetime.now() + timedelta(hours=miles_downstream / 3.0),
+            'travel_time_hours': miles_downstream / 3.0 if miles_downstream > 0 else 0,
+            'arrival_time': datetime.now() + timedelta(hours=miles_downstream / 3.0) if miles_downstream > 0 else datetime.now(),
             'data_timestamp': datetime.now().isoformat(),
-            'user_coordinates': (fallback_lat, fallback_lon),
-            'dam_coordinates': (fallback_lat + 0.1, fallback_lon + 0.1),
+            'user_coordinates': (center_lat + 0.1, center_lon - 0.1),
+            'dam_coordinates': (center_lat, center_lon),
             'flow_data_available': False
         }
         
