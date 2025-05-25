@@ -8,4 +8,5 @@ folium
 streamlit-folium
 bs4
 html5lib
+streamlit_pwa
 
