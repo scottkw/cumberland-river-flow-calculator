@@ -61,70 +61,152 @@ class CumberlandRiverFlowCalculator:
     """
     
     def __init__(self):
-        # Cumberland River major dams from upstream to downstream
-        self.dams = {
+        # Cumberland River major dams with USGS site IDs only
+        # Coordinates, elevation, and names will be fetched dynamically
+        self.dam_sites = {
             'Wolf Creek Dam': {
                 'usgs_site': '03160000',
-                'lat': 36.8939, 'lon': -84.9269,
-                'elevation_ft': 723,
                 'capacity_cfs': 70000,
                 'river_mile': 460.9
             },
             'Dale Hollow Dam': {
                 'usgs_site': '03141000', 
-                'lat': 36.5528, 'lon': -85.4597,
-                'elevation_ft': 651,
                 'capacity_cfs': 54000,
                 'river_mile': 387.2
             },
             'Center Hill Dam': {
                 'usgs_site': '03429500',
-                'lat': 36.1089, 'lon': -85.7781,
-                'elevation_ft': 685,
                 'capacity_cfs': 89000,
                 'river_mile': 325.7
             },
             'Old Hickory Dam': {
                 'usgs_site': '03431500',
-                'lat': 36.2939, 'lon': -86.6158,
-                'elevation_ft': 445,
                 'capacity_cfs': 120000,
                 'river_mile': 216.2
             },
             'J Percy Priest Dam': {
                 'usgs_site': '03430500',
-                'lat': 36.0667, 'lon': -86.6333,
-                'elevation_ft': 462,
                 'capacity_cfs': 65000,
                 'river_mile': 189.5
             },
             'Cheatham Dam': {
                 'usgs_site': '03431700',
-                'lat': 36.2972, 'lon': -87.0272,
-                'elevation_ft': 392,
                 'capacity_cfs': 130000,
                 'river_mile': 148.7
             },
             'Barkley Dam': {
                 'usgs_site': '03438220',
-                'lat': 36.8631, 'lon': -88.2439,
-                'elevation_ft': 359,
                 'capacity_cfs': 200000,
                 'river_mile': 30.6
             }
         }
         
+        # This will be populated with full dam data including coordinates
+        self.dams = {}
+        
+        # Initialize dam data
+        self._initialize_dam_data()
+        
         # River mile to coordinate mapping (approximate)
         self.mile_markers = self._generate_mile_markers()
     
+    def get_usgs_site_info(self, site_id: str) -> Optional[Dict]:
+        """Fetch site information including coordinates from USGS"""
+        try:
+            url = "https://waterservices.usgs.gov/nwis/site/"
+            params = {
+                'format': 'json',
+                'sites': site_id,
+                'siteOutput': 'expanded'
+            }
+            
+            response = requests.get(url, params=params, timeout=10)
+            response.raise_for_status()
+            
+            data = response.json()
+            if 'value' in data and 'timeSeries' in data['value']:
+                site_info = data['value']['timeSeries'][0]['sourceInfo']
+                return {
+                    'name': site_info.get('siteName', 'Unknown'),
+                    'lat': float(site_info['geoLocation']['geogLocation']['latitude']),
+                    'lon': float(site_info['geoLocation']['geogLocation']['longitude']),
+                    'elevation_ft': float(site_info['elevation_va']) if 'elevation_va' in site_info else 400.0
+                }
+            else:
+                # Try alternative site info endpoint
+                url = "https://waterservices.usgs.gov/nwis/site/"
+                params = {
+                    'format': 'json',
+                    'sites': site_id
+                }
+                
+                response = requests.get(url, params=params, timeout=10)
+                response.raise_for_status()
+                
+                data = response.json()
+                if 'value' in data and 'timeSeries' in data['value']:
+                    site_info = data['value']['timeSeries'][0]['sourceInfo']
+                    return {
+                        'name': site_info.get('siteName', 'Unknown'),
+                        'lat': float(site_info['geoLocation']['geogLocation']['latitude']),
+                        'lon': float(site_info['geoLocation']['geogLocation']['longitude']),
+                        'elevation_ft': float(site_info.get('elevation_va', 400.0))
+                    }
+                    
+        except Exception as e:
+            st.warning(f"Could not fetch site info for {site_id}: {str(e)}")
+            return None
+    
+    def _initialize_dam_data(self):
+        """Initialize dam data by fetching coordinates from USGS"""
+        with st.spinner("Loading dam information from USGS..."):
+            for dam_name, dam_info in self.dam_sites.items():
+                site_info = self.get_usgs_site_info(dam_info['usgs_site'])
+                
+                if site_info:
+                    # Merge static info with dynamic site info
+                    self.dams[dam_name] = {
+                        **dam_info,
+                        'lat': site_info['lat'],
+                        'lon': site_info['lon'],
+                        'elevation_ft': site_info['elevation_ft'],
+                        'official_name': site_info['name']
+                    }
+                else:
+                    # Fallback to approximate coordinates if USGS fetch fails
+                    fallback_coords = self._get_fallback_coordinates(dam_name)
+                    self.dams[dam_name] = {
+                        **dam_info,
+                        'lat': fallback_coords[0],
+                        'lon': fallback_coords[1],
+                        'elevation_ft': 400.0,
+                        'official_name': dam_name
+                    }
+                    st.warning(f"Using fallback coordinates for {dam_name}")
+    
+    def _get_fallback_coordinates(self, dam_name: str) -> Tuple[float, float]:
+        """Provide fallback coordinates if USGS fetch fails"""
+        fallback_coords = {
+            'Wolf Creek Dam': (36.8939, -84.9269),
+            'Dale Hollow Dam': (36.5528, -85.4597),
+            'Center Hill Dam': (36.1089, -85.7781),
+            'Old Hickory Dam': (36.2939, -86.6158),
+            'J Percy Priest Dam': (36.0667, -86.6333),
+            'Cheatham Dam': (36.2972, -87.0272),
+            'Barkley Dam': (36.8631, -88.2439)
+        }
+        return fallback_coords.get(dam_name, (36.0, -86.0))
+    
     def _generate_mile_markers(self):
         """Generate mile marker coordinates along the Cumberland River"""
-        # This is a simplified linear interpolation between dam points
-        # In a real application, you'd use actual river mile survey data
+        if not self.dams:
+            return {}
+            
         mile_coords = {}
         
         # Create interpolated points between dams
-        dam_list = list(self.dams.items())
+        dam_list = sorted(self.dams.items(), key=lambda x: x[1]['river_mile'], reverse=True)
+        
         for i in range(len(dam_list) - 1):
             dam1_name, dam1_data = dam_list[i]
             dam2_name, dam2_data = dam_list[i + 1]
@@ -249,6 +331,10 @@ class CumberlandRiverFlowCalculator:
         # Find closest mile markers and interpolate
         miles = sorted(self.mile_markers.keys())
         
+        if not miles:
+            # Fallback if no mile markers available
+            return (36.1, -86.8)  # Approximate center of Cumberland River
+        
         if river_mile <= min(miles):
             return self.mile_markers[min(miles)]
         if river_mile >= max(miles):
@@ -344,8 +430,9 @@ def create_map(calculator, selected_dam, user_mile):
     # Add dam marker
     dam_tooltip = f"""
     <b>{selected_dam}</b><br>
+    Official Name: {dam_data.get('official_name', 'N/A')}<br>
     River Mile: {dam_data['river_mile']}<br>
-    Elevation: {dam_data['elevation_ft']} ft<br>
+    Elevation: {dam_data['elevation_ft']:.0f} ft<br>
     Capacity: {dam_data['capacity_cfs']:,} cfs<br>
     Current Release: {result['current_flow_at_dam']:.0f} cfs<br>
     Data Time: {result['data_timestamp'][:19]}
@@ -394,17 +481,30 @@ def main():
     st.markdown("*Real-time flow calculations and arrival predictions*")
     
     # Initialize calculator
-    calculator = get_calculator()
+    try:
+        calculator = get_calculator()
+        
+        if not calculator.dams:
+            st.error("Unable to load dam data. Please check your internet connection and try refreshing.")
+            return
+            
+    except Exception as e:
+        st.error(f"Error initializing calculator: {str(e)}")
+        return
     
     # Sidebar controls
     st.sidebar.header("📍 Location Settings")
     
     # Dam selection
     dam_names = list(calculator.dams.keys())
+    if not dam_names:
+        st.error("No dam data available. Please refresh the page.")
+        return
+        
     selected_dam = st.sidebar.selectbox(
         "Select Closest Dam:",
         dam_names,
-        index=3,  # Default to Old Hickory Dam
+        index=min(3, len(dam_names)-1),  # Default to Old Hickory Dam or last available
         help="Choose the dam closest to your location"
     )
     
@@ -423,6 +523,21 @@ def main():
     if st.sidebar.button("🔄 Refresh Data", type="primary"):
         st.cache_data.clear()
         st.rerun()
+    
+    # Show data source status
+    st.sidebar.markdown("---")
+    st.sidebar.subheader("📡 Data Status")
+    
+    # Check if we have live data
+    dam_data = calculator.dams[selected_dam]
+    flow_data = calculator.get_usgs_flow_data(dam_data['usgs_site'])
+    
+    if flow_data:
+        st.sidebar.success("✅ Live USGS data available")
+        st.sidebar.caption(f"Last updated: {flow_data['timestamp'][:19]}")
+    else:
+        st.sidebar.warning("⚠️ Using estimated flow data")
+        st.sidebar.caption("Live data temporarily unavailable")
     
     # Main content area
     col1, col2 = st.columns([2, 1])
@@ -473,8 +588,10 @@ def main():
             
             dam_info = calculator.dams[selected_dam]
             st.write(f"**Selected Dam:** {selected_dam}")
+            st.write(f"**Official Name:** {dam_info.get('official_name', 'N/A')}")
             st.write(f"**Dam River Mile:** {dam_info['river_mile']}")
-            st.write(f"**Dam Elevation:** {dam_info['elevation_ft']} ft")
+            st.write(f"**Dam Elevation:** {dam_info['elevation_ft']:.0f} ft")
+            st.write(f"**Dam Coordinates:** {dam_info['lat']:.4f}, {dam_info['lon']:.4f}")
             st.write(f"**Your River Mile:** {user_mile}")
             
             if flow_result['travel_time_hours'] > 0:
@@ -492,14 +609,13 @@ def main():
     st.markdown("---")
     st.markdown("""
     **About This App:**
-    - Uses real-time USGS data when available
+    - Uses real-time USGS data and coordinates when available
     - Calculations include travel time and flow attenuation
-    - Dam locations and river miles are approximate
+    - Dam coordinates are fetched dynamically from USGS
     - Install as PWA for offline access
     
-    **Data Sources:** USGS Water Services, USGS Elevation Service
+    **Data Sources:** USGS Water Services, USGS Site Information Service, USGS Elevation Service
     """)
 
 if __name__ == "__main__":
     main()
-    
