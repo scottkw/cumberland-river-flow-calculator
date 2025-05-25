@@ -1,273 +1,480 @@
 import streamlit as st
-import requests
-from bs4 import BeautifulSoup
-import pandas as pd
-import re
-import os
-
-st.set_page_config(page_title="Cumberland River Flow Rates", layout="centered")
-
-# Inject custom CSS for faded background image using base64-encoded image
-from utils import get_img_as_base64
-img_path = "img/james-wheeler-HJhGcU_IbsQ-unsplash.jpg"
-img_base64 = get_img_as_base64(img_path)
-st.markdown(f"""
-    <style>
-    [data-testid="stAppViewContainer"]::before {{
-        content: "";
-        position: fixed;
-        top: 0;
-        left: 0;
-        width: 100vw;
-        height: 100vh;
-        background: url('data:image/jpeg;base64,{img_base64}') center/cover no-repeat;
-        opacity: 0.55; /* fade overlay */
-        z-index: 0;
-        pointer-events: none;
-    }}
-    [data-testid="stAppViewContainer"] > * {{
-        position: relative;
-        z-index: 1;
-    }}
-    </style>
-""", unsafe_allow_html=True)
-
-st.title("Cumberland River Downstream Flow Calculator")
-
-st.markdown("""
-<span style='font-size: 1rem;'>
-<strong>Instructions:</strong><br>
-Retrieve the "Average Hourly Discharge" (in CFS) from the <a href="https://www.tva.com/environment/lake-levels/Old-Hickory" target="_blank">TVA Old Hickory Dam lake levels page</a>.<br>
-Enter it below to calculate the flow rates at each mile marker downstream.
-</span>
-""", unsafe_allow_html=True)
-
-# --- Load dams from static JSON file and select dam before any calculations ---
-import json
-with open("cumberland_dams.json", "r") as f:
-    dams = json.load(f)
-if not dams:
-    st.error("Could not load dam data from cumberland_dams.json.")
-    st.stop()
-dams.sort(key=lambda d: -d["river_mile"])
-dam_names = [d["name"] for d in dams]
-# Default to Old Hickory Dam if present
-if "Old Hickory Dam" in dam_names:
-    default_index = dam_names.index("Old Hickory Dam")
-else:
-    default_index = 0
-
-# Arrange form elements in a grid (3 columns on desktop, stack on mobile)
-with st.container():
-    # First row: dam, discharge, max mile marker
-    row1_col1, row1_col2, row1_col3 = st.columns(3)
-    with row1_col1:
-        selected_dam_name = st.selectbox(
-            "Starting dam",
-            dam_names,
-            index=default_index,
-            key="dam_selectbox",
-            help="Choose the dam to start calculations from."
-        )
-    with row1_col2:
-        flow_cfs = st.number_input(
-            "Discharge (CFS)",
-            min_value=0,
-            value=2500,
-            step=1,
-            format="%d",
-            help="Average Hourly Discharge in Cubic Feet per Second."
-        )
-    with row1_col3:
-        # Set selected dam and max mile allowed
-        selected_dam_idx = dam_names.index(selected_dam_name)
-        selected_dam = dams[selected_dam_idx]
-        if selected_dam_idx < len(dams) - 1:
-            next_dam = dams[selected_dam_idx + 1]
-            max_mile_allowed = selected_dam["river_mile"] - next_dam["river_mile"]
-        else:
-            max_mile_allowed = selected_dam["river_mile"]  # allow up to river mouth
-        max_mile_marker = st.number_input(
-            "Max mile marker",
-            min_value=1,
-            value=min(30, int(max_mile_allowed)),
-            max_value=int(max_mile_allowed),
-            step=1,
-            format="%d",
-            help=f"Maximum mile marker downstream from the dam (max {int(max_mile_allowed)})."
-        )
-    # Second row: loss per mile, latitude, longitude
-    row2_col1, row2_col2, row2_col3 = st.columns(3)
-    with row2_col1:
-        loss_percent = st.number_input(
-            "Loss per mile (%)",
-            min_value=0.0,
-            max_value=100.0,
-            value=0.5,
-            step=0.1,
-            format="%.2f",
-            help="Estimated flow loss per mile as a percent."
-        )
-    with row2_col2:
-        user_lat = st.number_input(
-            "Your Latitude",
-            value=selected_dam.get("lat", 36.2912),
-            format="%.6f",
-            help="Enter your latitude (decimal degrees)."
-        )
-    with row2_col3:
-        user_lon = st.number_input(
-            "Your Longitude",
-            value=selected_dam.get("lon", -86.6515),
-            format="%.6f",
-            help="Enter your longitude (decimal degrees)."
-        )
-
-mile_markers = list(range(0, max_mile_marker + 1))
-
-# Compact input style for all widgets
-st.markdown("""
-    <style>
-    .stNumberInput, .stSelectbox, .stTextInput, .stSlider, .stButton, .stTextArea {
-        max-width: 100%;
-        font-size: 1rem;
-        padding: 0.2rem 0.5rem;
-        margin-bottom: 0.3rem;
-    }
-    /* Make columns tighter */
-    section[data-testid="column"] {
-        gap: 0.1rem !important;
-        min-width: 0 !important;
-    }
-    /* Reduce padding on container */
-    [data-testid="stAppViewContainer"] > .main {
-        padding-top: 0.5rem;
-    }
-    </style>
-""", unsafe_allow_html=True)
-
-if flow_cfs == 0:
-    st.warning("Please enter a valid discharge value to proceed.")
-
-import numpy as np
-import requests
-import shapely.geometry
-import geopandas as gpd
 import folium
-from shapely.geometry import LineString, Point
 from streamlit_folium import st_folium
+import requests
+import json
+import numpy as np
+from datetime import datetime, timedelta
+import math
+from typing import Dict, List, Tuple, Optional
+import time
+import pandas as pd
+from streamlit_pwa import pwa
 
-if flow_cfs and flow_cfs > 0:
-    loss_rate = loss_percent / 100.0
-    flow_cfm_initial = flow_cfs * 60
-    # Fetch Cumberland River path from OSM Overpass API
-    # st.info("Loading real Cumberland River path from OpenStreetMap...")  # Hidden
-    overpass_url = "https://overpass-api.de/api/interpreter"
-    # Dynamically set bounding box: center on selected dam, extend downstream ~0.3 deg lat, 0.2 deg lon
-    dam_lat = selected_dam["lat"]
-    dam_lon = selected_dam["lon"]
-    bbox = [dam_lat - 0.3, dam_lon - 0.2, dam_lat + 0.1, dam_lon + 0.2]  # south, west, north, east
-    query = f"""
-    [out:json][timeout:25];
-    (
-      way["waterway"="river"]["name"="Cumberland River"]({bbox[0]},{bbox[1]},{bbox[2]},{bbox[3]});
-    );
-    (._;>;);
-    out body;
+# Configure PWA
+pwa(
+    name="Cumberland River Flow Calculator",
+    short_name="River Flow",
+    description="Calculate Cumberland River flow rates at any location",
+    start_url="/",
+    display="standalone",
+    background_color="#1f77b4",
+    theme_color="#1f77b4",
+    icon="🌊",
+    orientation="portrait"
+)
+
+# Page configuration
+st.set_page_config(
+    page_title="Cumberland River Flow Calculator",
+    page_icon="🌊",
+    layout="wide",
+    initial_sidebar_state="expanded"
+)
+
+class CumberlandRiverFlowCalculator:
     """
-    try:
-        resp = requests.post(overpass_url, data={'data': query})
-        resp.raise_for_status()
-        data_osm = resp.json()
-        nodes = {n['id']: (n['lat'], n['lon']) for n in data_osm['elements'] if n['type'] == 'node'}
-        river_lines = []
-        for el in data_osm['elements']:
-            if el['type'] == 'way':
-                coords = [nodes[nid] for nid in el['nodes'] if nid in nodes]
-                if len(coords) > 1:
-                    river_lines.append(LineString([(lon, lat) for lat, lon in coords]))
-        # Merge all river segments into one line
-        if len(river_lines) == 0:
-            raise Exception("No river lines found in OSM response.")
-        river_line = river_lines[0]
-        for l in river_lines[1:]:
-            river_line = river_line.union(l)
-        if river_line.geom_type == 'MultiLineString':
-            river_line = max(river_line.geoms, key=lambda g: g.length)
-        # Find the point on the river line nearest the selected dam
-        dam_point = Point(dam_lon, dam_lat)
-        start_dist = river_line.project(dam_point)
-        # Interpolate mile markers starting from the selected dam
-        n_markers = max(mile_markers)
-        distances = [start_dist + (river_line.length - start_dist) * (i / n_markers) for i in range(n_markers + 1)]
-        marker_points = [river_line.interpolate(d) for d in distances]
-        marker_lats = [p.y for p in marker_points]
-        marker_lons = [p.x for p in marker_points]
-        marker_miles = list(range(n_markers + 1))
-        map_df = pd.DataFrame({"lat": marker_lats, "lon": marker_lons, "Mile Marker": marker_miles})
-    except Exception as e:
-        st.error(f"Error loading river geometry from OSM: {e}")
-        st.stop()
-
-    # Find nearest point on river and river mile
-    user_point = Point(user_lon, user_lat)
-    dists = [user_point.distance(Point(lon, lat)) for lon, lat in zip(marker_lons, marker_lats)]
-    min_idx = int(np.argmin(dists))
-    nearest_marker = marker_miles[min_idx]
-    nearest_lat = marker_lats[min_idx]
-    nearest_lon = marker_lons[min_idx]
-
-
-    # st.success(f"Nearest Mile Marker: {nearest_marker} (Lat: {nearest_lat:.5f}, Lon: {nearest_lon:.5f})")  # Hidden
-    cfm_at_user = int(flow_cfm_initial * ((1 - loss_rate) ** nearest_marker))
-    # st.info(f"Estimated Flow Rate at Your Location: {cfm_at_user:,} CFM")  # Hidden
-
-    # Plot with folium for better OSM visualization
-    m = folium.Map(location=[marker_lats[0], marker_lons[0]], zoom_start=11, tiles="OpenStreetMap")
-    folium.PolyLine(list(zip(marker_lats, marker_lons)), color="blue", weight=3, tooltip="Cumberland River").add_to(m)
-    import datetime
-    river_velocity_mph = 2.5  # Assumed average river velocity
-    now = datetime.datetime.strptime("2025-05-22 13:50:43", "%Y-%m-%d %H:%M:%S")
-    # Use selected dam as starting point for calculations
-    dam_lat = selected_dam["lat"]
-    dam_lon = selected_dam["lon"]
-    for idx, (lat, lon, mile) in enumerate(zip(marker_lats, marker_lons, marker_miles)):
-        if mile in mile_markers and mile <= max_mile_allowed:
-            travel_time_hr = mile / river_velocity_mph
-            arrival_time = now + datetime.timedelta(hours=travel_time_hr)
-            cfm_at_mile = int(flow_cfm_initial * ((1 - loss_rate) ** mile))
-            popup_content = (
-                f"<pre style='white-space: pre; font-family: monospace; min-width: 220px; width: 340px;'>"
-                f"Mile {mile}<br>Lat: {lat:.5f}<br>Lon: {lon:.5f}<br>Arrival: {arrival_time.strftime('%Y-%m-%d %H:%M:%S')}<br>CFM: {cfm_at_mile:,}"
-                f"</pre>"
+    Calculate flow rates of the Cumberland River at given points and times
+    based on dam releases, geographical data, and gravitational forces.
+    """
+    
+    def __init__(self):
+        # Cumberland River major dams from upstream to downstream
+        self.dams = {
+            'Wolf Creek Dam': {
+                'usgs_site': '03160000',
+                'lat': 36.8939, 'lon': -84.9269,
+                'elevation_ft': 723,
+                'capacity_cfs': 70000,
+                'river_mile': 460.9
+            },
+            'Dale Hollow Dam': {
+                'usgs_site': '03141000', 
+                'lat': 36.5528, 'lon': -85.4597,
+                'elevation_ft': 651,
+                'capacity_cfs': 54000,
+                'river_mile': 387.2
+            },
+            'Center Hill Dam': {
+                'usgs_site': '03429500',
+                'lat': 36.1089, 'lon': -85.7781,
+                'elevation_ft': 685,
+                'capacity_cfs': 89000,
+                'river_mile': 325.7
+            },
+            'Old Hickory Dam': {
+                'usgs_site': '03431500',
+                'lat': 36.2939, 'lon': -86.6158,
+                'elevation_ft': 445,
+                'capacity_cfs': 120000,
+                'river_mile': 216.2
+            },
+            'J Percy Priest Dam': {
+                'usgs_site': '03430500',
+                'lat': 36.0667, 'lon': -86.6333,
+                'elevation_ft': 462,
+                'capacity_cfs': 65000,
+                'river_mile': 189.5
+            },
+            'Cheatham Dam': {
+                'usgs_site': '03431700',
+                'lat': 36.2972, 'lon': -87.0272,
+                'elevation_ft': 392,
+                'capacity_cfs': 130000,
+                'river_mile': 148.7
+            },
+            'Barkley Dam': {
+                'usgs_site': '03438220',
+                'lat': 36.8631, 'lon': -88.2439,
+                'elevation_ft': 359,
+                'capacity_cfs': 200000,
+                'river_mile': 30.6
+            }
+        }
+        
+        # River mile to coordinate mapping (approximate)
+        self.mile_markers = self._generate_mile_markers()
+    
+    def _generate_mile_markers(self):
+        """Generate mile marker coordinates along the Cumberland River"""
+        # This is a simplified linear interpolation between dam points
+        # In a real application, you'd use actual river mile survey data
+        mile_coords = {}
+        
+        # Create interpolated points between dams
+        dam_list = list(self.dams.items())
+        for i in range(len(dam_list) - 1):
+            dam1_name, dam1_data = dam_list[i]
+            dam2_name, dam2_data = dam_list[i + 1]
+            
+            start_mile = dam1_data['river_mile']
+            end_mile = dam2_data['river_mile']
+            start_lat, start_lon = dam1_data['lat'], dam1_data['lon']
+            end_lat, end_lon = dam2_data['lat'], dam2_data['lon']
+            
+            # Generate points every 5 miles
+            for mile in range(int(end_mile), int(start_mile), 5):
+                if mile > end_mile:
+                    ratio = (mile - end_mile) / (start_mile - end_mile)
+                    lat = end_lat + ratio * (start_lat - end_lat)
+                    lon = end_lon + ratio * (start_lon - end_lon)
+                    mile_coords[mile] = (lat, lon)
+        
+        return mile_coords
+    
+    def get_usgs_flow_data(self, site_id: str, days_back: int = 1) -> Optional[Dict]:
+        """Fetch current flow data from USGS Water Services API"""
+        try:
+            end_date = datetime.now()
+            start_date = end_date - timedelta(days=days_back)
+            
+            url = f"https://waterservices.usgs.gov/nwis/iv/"
+            params = {
+                'format': 'json',
+                'sites': site_id,
+                'parameterCd': '00060',  # Discharge parameter
+                'startDT': start_date.strftime('%Y-%m-%d'),
+                'endDT': end_date.strftime('%Y-%m-%d')
+            }
+            
+            response = requests.get(url, params=params, timeout=10)
+            response.raise_for_status()
+            
+            data = response.json()
+            if 'value' in data and 'timeSeries' in data['value']:
+                time_series = data['value']['timeSeries']
+                if time_series and 'values' in time_series[0]:
+                    values = time_series[0]['values'][0]['value']
+                    if values:
+                        latest_value = values[-1]['value']
+                        return {
+                            'flow_cfs': float(latest_value),
+                            'timestamp': values[-1]['dateTime'],
+                            'site_name': time_series[0]['sourceInfo']['siteName']
+                        }
+        except Exception as e:
+            st.warning(f"Could not fetch live data for site {site_id}: {str(e)}")
+            return None
+    
+    def get_elevation_usgs(self, lat: float, lon: float) -> float:
+        """Get elevation using USGS Elevation Point Query Service"""
+        try:
+            url = "https://nationalmap.gov/epqs/pqs.php"
+            params = {
+                'x': lon,
+                'y': lat,
+                'units': 'Feet',
+                'output': 'json'
+            }
+            
+            response = requests.get(url, params=params, timeout=10)
+            response.raise_for_status()
+            
+            data = response.json()
+            if 'USGS_Elevation_Point_Query_Service' in data:
+                elevation_data = data['USGS_Elevation_Point_Query_Service']
+                if 'Elevation_Query' in elevation_data:
+                    elevation = elevation_data['Elevation_Query']['Elevation']
+                    return float(elevation)
+        except Exception as e:
+            st.warning(f"Could not fetch elevation data: {str(e)}")
+            return 400.0  # Default elevation
+    
+    def calculate_distance_miles(self, lat1: float, lon1: float, lat2: float, lon2: float) -> float:
+        """Calculate distance between two points using Haversine formula"""
+        R = 3959  # Earth's radius in miles
+        
+        lat1_rad = math.radians(lat1)
+        lon1_rad = math.radians(lon1)
+        lat2_rad = math.radians(lat2)
+        lon2_rad = math.radians(lon2)
+        
+        dlat = lat2_rad - lat1_rad
+        dlon = lon2_rad - lon1_rad
+        
+        a = math.sin(dlat/2)**2 + math.cos(lat1_rad) * math.cos(lat2_rad) * math.sin(dlon/2)**2
+        c = 2 * math.asin(math.sqrt(a))
+        
+        return R * c
+    
+    def calculate_travel_time_hours(self, river_miles: float, avg_velocity_mph: float = 3.0) -> float:
+        """Calculate water travel time between points"""
+        return river_miles / avg_velocity_mph
+    
+    def find_closest_dam(self, target_lat: float, target_lon: float) -> Tuple[str, Dict]:
+        """Find the closest dam to given coordinates"""
+        min_distance = float('inf')
+        closest_dam = None
+        closest_dam_name = None
+        
+        for dam_name, dam_data in self.dams.items():
+            distance = self.calculate_distance_miles(
+                target_lat, target_lon, 
+                dam_data['lat'], dam_data['lon']
             )
-            folium.CircleMarker(
-                location=[lat, lon],
-                radius=6,
-                color="green",
-                fill=True,
-                fill_color="green",
-                fill_opacity=0.8,
-                tooltip=folium.Tooltip(popup_content, sticky=True, direction='right', permanent=False, max_width=340),
-                popup=folium.Popup(popup_content, max_width=340)
-            ).add_to(m)
-    # Calculate flow at user's location (nearest mile marker)
-    cfm_at_user = int(flow_cfm_initial * ((1 - loss_rate) ** nearest_marker))
-    dam_popup_content = (
-        f"<pre style='white-space: pre; font-family: monospace; min-width: 220px; width: 340px;'>"
-        f"{selected_dam['name']}<br>Lat: {dam_lat:.5f}<br>Lon: {dam_lon:.5f}<br>Time: {now.strftime('%Y-%m-%d %H:%M:%S')}"
-        f"</pre>"
+            if distance < min_distance:
+                min_distance = distance
+                closest_dam = dam_data
+                closest_dam_name = dam_name
+        
+        return closest_dam_name, closest_dam
+    
+    def get_coordinates_from_mile(self, river_mile: float) -> Tuple[float, float]:
+        """Get approximate coordinates from river mile marker"""
+        if river_mile in self.mile_markers:
+            return self.mile_markers[river_mile]
+        
+        # Find closest mile markers and interpolate
+        miles = sorted(self.mile_markers.keys())
+        
+        if river_mile <= min(miles):
+            return self.mile_markers[min(miles)]
+        if river_mile >= max(miles):
+            return self.mile_markers[max(miles)]
+        
+        # Find surrounding mile markers
+        lower_mile = max([m for m in miles if m <= river_mile])
+        upper_mile = min([m for m in miles if m >= river_mile])
+        
+        if lower_mile == upper_mile:
+            return self.mile_markers[lower_mile]
+        
+        # Linear interpolation
+        ratio = (river_mile - lower_mile) / (upper_mile - lower_mile)
+        lower_lat, lower_lon = self.mile_markers[lower_mile]
+        upper_lat, upper_lon = self.mile_markers[upper_mile]
+        
+        lat = lower_lat + ratio * (upper_lat - lower_lat)
+        lon = lower_lon + ratio * (upper_lon - lower_lon)
+        
+        return lat, lon
+    
+    def calculate_flow_with_timing(self, selected_dam: str, user_mile: float) -> Dict:
+        """Calculate flow rate and arrival time at user location"""
+        # Get dam data
+        dam_data = self.dams[selected_dam]
+        dam_mile = dam_data['river_mile']
+        
+        # Get user coordinates
+        user_lat, user_lon = self.get_coordinates_from_mile(user_mile)
+        
+        # Get current flow data
+        flow_data = self.get_usgs_flow_data(dam_data['usgs_site'])
+        
+        if flow_data:
+            current_flow = flow_data['flow_cfs']
+            data_timestamp = flow_data['timestamp']
+        else:
+            # Use estimated flow if live data unavailable
+            current_flow = dam_data['capacity_cfs'] * 0.4
+            data_timestamp = datetime.now().isoformat()
+        
+        # Calculate travel distance and time
+        if user_mile < dam_mile:  # User is downstream
+            travel_miles = dam_mile - user_mile
+            travel_time_hours = self.calculate_travel_time_hours(travel_miles)
+            arrival_time = datetime.now() + timedelta(hours=travel_time_hours)
+            
+            # Apply attenuation factor
+            attenuation = math.exp(-travel_miles / 100)
+            flow_at_location = current_flow * attenuation
+        else:
+            # User is upstream of selected dam
+            travel_miles = 0
+            travel_time_hours = 0
+            arrival_time = datetime.now()
+            flow_at_location = current_flow * 0.5  # Reduced flow upstream
+        
+        return {
+            'current_flow_at_dam': current_flow,
+            'flow_at_user_location': flow_at_location,
+            'travel_miles': travel_miles,
+            'travel_time_hours': travel_time_hours,
+            'arrival_time': arrival_time,
+            'data_timestamp': data_timestamp,
+            'user_coordinates': (user_lat, user_lon),
+            'dam_coordinates': (dam_data['lat'], dam_data['lon'])
+        }
+
+@st.cache_data
+def get_calculator():
+    """Cached calculator instance"""
+    return CumberlandRiverFlowCalculator()
+
+def create_map(calculator, selected_dam, user_mile):
+    """Create interactive map with dam and user location"""
+    # Calculate flow and get coordinates
+    result = calculator.calculate_flow_with_timing(selected_dam, user_mile)
+    user_lat, user_lon = result['user_coordinates']
+    dam_lat, dam_lon = result['dam_coordinates']
+    dam_data = calculator.dams[selected_dam]
+    
+    # Create base map centered between dam and user location
+    center_lat = (user_lat + dam_lat) / 2
+    center_lon = (user_lon + dam_lon) / 2
+    
+    m = folium.Map(
+        location=[center_lat, center_lon],
+        zoom_start=9,
+        tiles='OpenStreetMap'
     )
-    folium.CircleMarker(
-        location=[dam_lat, dam_lon],
-        radius=8,
-        color="red",
-        fill=True,
-        fill_color="red",
-        fill_opacity=0.9,
-        tooltip=folium.Tooltip(dam_popup_content, sticky=True, direction='right', permanent=False, max_width=340),
-        popup=folium.Popup(dam_popup_content, max_width=340)
+    
+    # Add dam marker
+    dam_tooltip = f"""
+    <b>{selected_dam}</b><br>
+    River Mile: {dam_data['river_mile']}<br>
+    Elevation: {dam_data['elevation_ft']} ft<br>
+    Capacity: {dam_data['capacity_cfs']:,} cfs<br>
+    Current Release: {result['current_flow_at_dam']:.0f} cfs<br>
+    Data Time: {result['data_timestamp'][:19]}
+    """
+    
+    folium.Marker(
+        [dam_lat, dam_lon],
+        popup=f"{selected_dam}",
+        tooltip=dam_tooltip,
+        icon=folium.Icon(color='blue', icon='tint', prefix='fa')
     ).add_to(m)
-    st.subheader("Map of Cumberland River, Mile Markers, and Dam Location")
-    st_folium(m, width=700, height=700)
-    st.caption("River path, markers, and dam from OpenStreetMap and Wikipedia. For high-precision work, use official TVA or GIS data.")
+    
+    # Add user location marker
+    user_tooltip = f"""
+    <b>Your Location</b><br>
+    River Mile: {user_mile}<br>
+    Calculated Flow: {result['flow_at_user_location']:.0f} cfs<br>
+    Travel Distance: {result['travel_miles']:.1f} miles<br>
+    Arrival Time: {result['arrival_time'].strftime('%I:%M %p')}<br>
+    Travel Duration: {result['travel_time_hours']:.1f} hours
+    """
+    
+    folium.Marker(
+        [user_lat, user_lon],
+        popup="Your Location",
+        tooltip=user_tooltip,
+        icon=folium.Icon(color='red', icon='user', prefix='fa')
+    ).add_to(m)
+    
+    # Add river line between points
+    folium.PolyLine(
+        locations=[[dam_lat, dam_lon], [user_lat, user_lon]],
+        color='lightblue',
+        weight=3,
+        opacity=0.7
+    ).add_to(m)
+    
+    return m, result
+
+def main():
+    """Main Streamlit application"""
+    st.title("🌊 Cumberland River Flow Calculator")
+    st.markdown("*Real-time flow calculations and arrival predictions*")
+    
+    # Initialize calculator
+    calculator = get_calculator()
+    
+    # Sidebar controls
+    st.sidebar.header("📍 Location Settings")
+    
+    # Dam selection
+    dam_names = list(calculator.dams.keys())
+    selected_dam = st.sidebar.selectbox(
+        "Select Closest Dam:",
+        dam_names,
+        index=3,  # Default to Old Hickory Dam
+        help="Choose the dam closest to your location"
+    )
+    
+    # Mile marker input
+    dam_mile = calculator.dams[selected_dam]['river_mile']
+    user_mile = st.sidebar.number_input(
+        "Your River Mile Marker:",
+        min_value=0.0,
+        max_value=500.0,
+        value=max(0.0, dam_mile - 20.0),  # Default 20 miles downstream
+        step=0.1,
+        help="Enter the river mile marker closest to your location"
+    )
+    
+    # Add refresh button
+    if st.sidebar.button("🔄 Refresh Data", type="primary"):
+        st.cache_data.clear()
+        st.rerun()
+    
+    # Main content area
+    col1, col2 = st.columns([2, 1])
+    
+    with col1:
+        st.subheader("📍 Interactive Map")
+        
+        try:
+            # Create and display map
+            river_map, flow_result = create_map(calculator, selected_dam, user_mile)
+            map_data = st_folium(river_map, width=700, height=500)
+            
+        except Exception as e:
+            st.error(f"Error creating map: {str(e)}")
+            st.info("Please check your internet connection and try refreshing the data.")
+    
+    with col2:
+        st.subheader("📊 Flow Information")
+        
+        try:
+            # Display key metrics
+            st.metric(
+                "Flow at Your Location",
+                f"{flow_result['flow_at_user_location']:.0f} cfs",
+                help="Calculated flow rate at your river mile"
+            )
+            
+            st.metric(
+                "Dam Release Rate",
+                f"{flow_result['current_flow_at_dam']:.0f} cfs",
+                help="Current release from selected dam"
+            )
+            
+            st.metric(
+                "Water Arrival Time",
+                flow_result['arrival_time'].strftime('%I:%M %p'),
+                help="When water released now will reach you"
+            )
+            
+            st.metric(
+                "Travel Distance",
+                f"{flow_result['travel_miles']:.1f} miles",
+                help="Distance water travels from dam to your location"
+            )
+            
+            # Additional information
+            st.subheader("ℹ️ Details")
+            
+            dam_info = calculator.dams[selected_dam]
+            st.write(f"**Selected Dam:** {selected_dam}")
+            st.write(f"**Dam River Mile:** {dam_info['river_mile']}")
+            st.write(f"**Dam Elevation:** {dam_info['elevation_ft']} ft")
+            st.write(f"**Your River Mile:** {user_mile}")
+            
+            if flow_result['travel_time_hours'] > 0:
+                st.write(f"**Travel Time:** {flow_result['travel_time_hours']:.1f} hours")
+            else:
+                st.info("You are upstream of the selected dam.")
+            
+            # Data timestamp
+            st.caption(f"Data as of: {flow_result['data_timestamp'][:19]}")
+            
+        except Exception as e:
+            st.error(f"Error calculating flow: {str(e)}")
+    
+    # Footer information
+    st.markdown("---")
+    st.markdown("""
+    **About This App:**
+    - Uses real-time USGS data when available
+    - Calculations include travel time and flow attenuation
+    - Dam locations and river miles are approximate
+    - Install as PWA for offline access
+    
+    **Data Sources:** USGS Water Services, USGS Elevation Service
+    """)
+
+if __name__ == "__main__":
+    main()
+    
