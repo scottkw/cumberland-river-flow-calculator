@@ -417,13 +417,33 @@ def create_map(calculator, selected_dam, user_mile):
     dam_lat, dam_lon = result['dam_coordinates']
     dam_data = calculator.dams[selected_dam]
     
+    # Create a unique key for this map configuration
+    map_key = f"{selected_dam}_{user_mile}"
+    
+    # Check if we need to recreate the map (parameters changed)
+    if 'last_map_key' not in st.session_state or st.session_state.last_map_key != map_key:
+        st.session_state.last_map_key = map_key
+        st.session_state.recreate_map = True
+    else:
+        st.session_state.recreate_map = False
+    
     # Create base map centered between dam and user location
     center_lat = (user_lat + dam_lat) / 2
     center_lon = (user_lon + dam_lon) / 2
     
+    # Use stored map state if available and we're not recreating the map
+    if (not st.session_state.get('recreate_map', False) and 
+        st.session_state.get('map_center') and 
+        st.session_state.get('map_zoom')):
+        center_lat = st.session_state.map_center['lat']
+        center_lon = st.session_state.map_center['lng']
+        zoom_level = st.session_state.map_zoom
+    else:
+        zoom_level = 9
+    
     m = folium.Map(
         location=[center_lat, center_lon],
-        zoom_start=9,
+        zoom_start=zoom_level,
         tiles='OpenStreetMap'
     )
     
@@ -479,6 +499,12 @@ def main():
     
     st.title("🌊 Cumberland River Flow Calculator")
     st.markdown("*Real-time flow calculations and arrival predictions*")
+    
+    # Initialize session state for map persistence
+    if 'map_center' not in st.session_state:
+        st.session_state.map_center = None
+    if 'map_zoom' not in st.session_state:
+        st.session_state.map_zoom = 9
     
     # Initialize calculator
     try:
@@ -548,7 +574,20 @@ def main():
         try:
             # Create and display map
             river_map, flow_result = create_map(calculator, selected_dam, user_mile)
-            map_data = st_folium(river_map, width=700, height=500)
+            
+            # Use a stable key and preserve zoom/center when possible
+            map_data = st_folium(
+                river_map, 
+                width=700, 
+                height=500,
+                returned_objects=["last_clicked", "last_object_clicked_tooltip", "center", "zoom"],
+                key="river_map"
+            )
+            
+            # Store map state to preserve user interactions
+            if map_data['center'] and not st.session_state.get('recreate_map', False):
+                st.session_state.map_center = map_data['center']
+                st.session_state.map_zoom = map_data['zoom']
             
         except Exception as e:
             st.error(f"Error creating map: {str(e)}")
@@ -619,3 +658,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+    
