@@ -707,130 +707,98 @@ def get_calculator():
     return CumberlandRiverFlowCalculator()
 
 def create_map(calculator, selected_dam, miles_downstream):
-    """Create interactive map with dam and user location using downstream distance"""
+    """Create interactive map with dam and user location - simplified and robust"""
+    
+    # Get dam coordinates (these should always be valid)
+    dam_data = calculator.dams[selected_dam]
+    dam_lat, dam_lon = dam_data['lat'], dam_data['lon']
+    
+    # Get user coordinates
+    user_lat, user_lon = calculator.get_coordinates_from_downstream_distance(selected_dam, miles_downstream)
+    
+    # Get flow data safely
     try:
-        # Calculate flow and get coordinates using downstream distance
-        result = calculator.calculate_flow_with_timing_downstream(selected_dam, miles_downstream)
-        user_lat, user_lon = result['user_coordinates']
-        dam_lat, dam_lon = result['dam_coordinates']
-        dam_data = calculator.dams[selected_dam]
-        
-        # Debug: Validate and log coordinates
-        coords_valid = all(isinstance(coord, (int, float)) and -180 <= coord <= 180 for coord in [user_lat, user_lon, dam_lat, dam_lon])
-        
-        if not coords_valid:
-            # Use dam coordinates as both points if invalid
-            user_lat, user_lon = dam_lat, dam_lon
-        
-        # Ensure coordinates are within reasonable bounds
-        if not (35.0 <= user_lat <= 38.0 and -89.0 <= user_lon <= -84.0):
-            user_lat, user_lon = dam_lat, dam_lon
-        
-        if not (35.0 <= dam_lat <= 38.0 and -89.0 <= dam_lon <= -84.0):
-            dam_lat, dam_lon = 36.1, -86.8  # Nashville area fallback
-        
-        # Create base map centered between dam and user location
-        center_lat = (user_lat + dam_lat) / 2
-        center_lon = (user_lon + dam_lon) / 2
-        
-        # Validate center coordinates
-        if not (35.0 <= center_lat <= 38.0 and -89.0 <= center_lon <= -84.0):
-            center_lat, center_lon = 36.1, -86.8
-        
-        # Calculate zoom level based on distance
-        distance = calculator.calculate_distance_miles(user_lat, user_lon, dam_lat, dam_lon)
-        if distance < 1:
-            zoom_level = 13
-        elif distance < 5:
-            zoom_level = 12
-        elif distance < 15:
-            zoom_level = 10
-        elif distance < 30:
-            zoom_level = 9
+        flow_data = calculator.get_usgs_flow_data(dam_data['usgs_site'])
+        if flow_data:
+            current_flow = flow_data['flow_cfs']
+            flow_available = True
         else:
-            zoom_level = 8
-        
-        # Create map
-        m = folium.Map(
-            location=[center_lat, center_lon],
-            zoom_start=zoom_level,
-            tiles='OpenStreetMap'
-        )
-        
-        # Add dam marker - ensure it's always added
-        dam_tooltip = f"""
-        <b>{selected_dam}</b><br>
-        Lat: {dam_lat:.4f}, Lon: {dam_lon:.4f}<br>
-        Current Release: {result['current_flow_at_dam']:.0f} cfs<br>
-        You are {miles_downstream:.1f} miles downstream
-        """
-        
-        folium.Marker(
-            location=[dam_lat, dam_lon],
-            popup=f"{selected_dam}",
-            tooltip=dam_tooltip,
-            icon=folium.Icon(color='blue', icon='info-sign')
+            current_flow = dam_data['capacity_cfs'] * 0.4  # Estimated
+            flow_available = False
+    except:
+        current_flow = dam_data['capacity_cfs'] * 0.4  # Fallback
+        flow_available = False
+    
+    # Calculate downstream flow
+    if miles_downstream > 0:
+        attenuation = math.exp(-miles_downstream / 100)
+        user_flow = current_flow * attenuation
+        travel_time = miles_downstream / 3.0  # 3 mph average
+    else:
+        user_flow = current_flow
+        travel_time = 0
+    
+    # Create map centered between points
+    center_lat = (dam_lat + user_lat) / 2
+    center_lon = (dam_lon + user_lon) / 2
+    
+    # Calculate appropriate zoom level
+    distance = calculator.calculate_distance_miles(user_lat, user_lon, dam_lat, dam_lon)
+    if distance < 2:
+        zoom_level = 12
+    elif distance < 10:
+        zoom_level = 10
+    elif distance < 25:
+        zoom_level = 9
+    else:
+        zoom_level = 8
+    
+    # Create the map
+    m = folium.Map(location=[center_lat, center_lon], zoom_start=zoom_level)
+    
+    # Add dam marker with simple, safe tooltip
+    dam_tooltip = f"{selected_dam}<br>Flow: {current_flow:.0f} cfs"
+    
+    folium.Marker(
+        location=[dam_lat, dam_lon],
+        popup=selected_dam,
+        tooltip=dam_tooltip,
+        icon=folium.Icon(color='blue', icon='info-sign')
+    ).add_to(m)
+    
+    # Add user marker with simple, safe tooltip
+    user_tooltip = f"Your Location<br>{miles_downstream:.1f} miles downstream<br>Flow: {user_flow:.0f} cfs"
+    
+    folium.Marker(
+        location=[user_lat, user_lon],
+        popup="Your Location",
+        tooltip=user_tooltip,
+        icon=folium.Icon(color='red', icon='info-sign')
+    ).add_to(m)
+    
+    # Add line if points are different
+    if miles_downstream > 0 and distance > 0.5:
+        folium.PolyLine(
+            locations=[[dam_lat, dam_lon], [user_lat, user_lon]],
+            color='blue',
+            weight=3,
+            opacity=0.7
         ).add_to(m)
-        
-        # Add user location marker - ensure it's always added
-        user_tooltip = f"""
-        <b>Your Location</b><br>
-        Lat: {user_lat:.4f}, Lon: {user_lon:.4f}<br>
-        {miles_downstream:.1f} miles downstream from {selected_dam}<br>
-        Calculated Flow: {result['flow_at_user_location']:.0f} cfs
-        """
-        
-        folium.Marker(
-            location=[user_lat, user_lon],
-            popup="Your Location",
-            tooltip=user_tooltip,
-            icon=folium.Icon(color='red', icon='info-sign')
-        ).add_to(m)
-        
-        # Draw line showing downstream path (only if points are different)
-        if miles_downstream > 0 and (abs(user_lat - dam_lat) > 0.001 or abs(user_lon - dam_lon) > 0.001):
-            folium.PolyLine(
-                locations=[[dam_lat, dam_lon], [user_lat, user_lon]],
-                color='blue',
-                weight=3,
-                opacity=0.7,
-                popup=f"~{miles_downstream:.1f} miles downstream"
-            ).add_to(m)
-        
-        return m, result
-        
-    except Exception as e:
-        # Create a basic fallback map with guaranteed markers
-        center_lat, center_lon = 36.1, -86.8
-        m = folium.Map(location=[center_lat, center_lon], zoom_start=8)
-        
-        # Add fallback markers
-        folium.Marker(
-            location=[center_lat, center_lon],
-            popup="Error - Dam Location",
-            icon=folium.Icon(color='blue', icon='info-sign')
-        ).add_to(m)
-        
-        folium.Marker(
-            location=[center_lat + 0.1, center_lon - 0.1],
-            popup="Error - User Location",
-            icon=folium.Icon(color='red', icon='info-sign')
-        ).add_to(m)
-        
-        # Create basic result for display
-        result = {
-            'current_flow_at_dam': 50000,
-            'flow_at_user_location': 45000,
-            'travel_miles': miles_downstream,
-            'travel_time_hours': miles_downstream / 3.0 if miles_downstream > 0 else 0,
-            'arrival_time': datetime.now() + timedelta(hours=miles_downstream / 3.0) if miles_downstream > 0 else datetime.now(),
-            'data_timestamp': datetime.now().isoformat(),
-            'user_coordinates': (center_lat + 0.1, center_lon - 0.1),
-            'dam_coordinates': (center_lat, center_lon),
-            'flow_data_available': False
-        }
-        
-        return m, result
+    
+    # Create result object
+    result = {
+        'current_flow_at_dam': current_flow,
+        'flow_at_user_location': user_flow,
+        'travel_miles': miles_downstream,
+        'travel_time_hours': travel_time,
+        'arrival_time': datetime.now() + timedelta(hours=travel_time),
+        'data_timestamp': datetime.now().isoformat(),
+        'user_coordinates': (user_lat, user_lon),
+        'dam_coordinates': (dam_lat, dam_lon),
+        'flow_data_available': flow_available
+    }
+    
+    return m, result
 
 def main():
     """Main Streamlit application"""
