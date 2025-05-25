@@ -10,6 +10,14 @@ from typing import Dict, List, Tuple, Optional
 import time
 import pandas as pd
 
+# Page configuration MUST be first
+st.set_page_config(
+    page_title="Cumberland River Flow Calculator",
+    page_icon="🌊",
+    layout="wide",
+    initial_sidebar_state="expanded"
+)
+
 # Configure PWA using HTML components
 def configure_pwa():
     """Configure PWA using HTML meta tags and manifest"""
@@ -45,16 +53,6 @@ def configure_pwa():
     '''
     
     st.markdown(pwa_html, unsafe_allow_html=True)
-
-configure_pwa()
-
-# Page configuration
-st.set_page_config(
-    page_title="Cumberland River Flow Calculator",
-    page_icon="🌊",
-    layout="wide",
-    initial_sidebar_state="expanded"
-)
 
 class CumberlandRiverFlowCalculator:
     """
@@ -389,6 +387,9 @@ def create_map(calculator, selected_dam, user_mile):
 
 def main():
     """Main Streamlit application"""
+    # Configure PWA first
+    configure_pwa()
+    
     st.title("🌊 Cumberland River Flow Calculator")
     st.markdown("*Real-time flow calculations and arrival predictions*")
     
