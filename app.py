@@ -9,20 +9,44 @@ import math
 from typing import Dict, List, Tuple, Optional
 import time
 import pandas as pd
-from streamlit_pwa import pwa
 
-# Configure PWA
-pwa(
-    name="Cumberland River Flow Calculator",
-    short_name="River Flow",
-    description="Calculate Cumberland River flow rates at any location",
-    start_url="/",
-    display="standalone",
-    background_color="#1f77b4",
-    theme_color="#1f77b4",
-    icon="🌊",
-    orientation="portrait"
-)
+# Configure PWA using HTML components
+def configure_pwa():
+    """Configure PWA using HTML meta tags and manifest"""
+    
+    # PWA Manifest
+    manifest = {
+        "name": "Cumberland River Flow Calculator",
+        "short_name": "River Flow",
+        "description": "Calculate Cumberland River flow rates at any location",
+        "start_url": "/",
+        "display": "standalone",
+        "background_color": "#1f77b4",
+        "theme_color": "#1f77b4",
+        "orientation": "portrait",
+        "icons": [
+            {
+                "src": "data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTkyIiBoZWlnaHQ9IjE5MiIgdmlld0JveD0iMCAwIDE5MiAxOTIiIGZpbGw9Im5vbmUiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+CjxyZWN0IHdpZHRoPSIxOTIiIGhlaWdodD0iMTkyIiBmaWxsPSIjMWY3N2I0Ii8+Cjx0ZXh0IHg9Ijk2IiB5PSIxMTAiIGZvbnQtZmFtaWx5PSJBcmlhbCIgZm9udC1zaXplPSI4MCIgZmlsbD0id2hpdGUiIHRleHQtYW5jaG9yPSJtaWRkbGUiPvCfjIo8L3RleHQ+Cjwvc3ZnPgo=",
+                "sizes": "192x192",
+                "type": "image/svg+xml"
+            }
+        ]
+    }
+    
+    # Inject PWA HTML
+    pwa_html = f'''
+    <link rel="manifest" href="data:application/json;base64,{json.dumps(manifest).encode('utf-8').hex()}">
+    <meta name="theme-color" content="#1f77b4">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
+    <meta name="apple-mobile-web-app-title" content="River Flow">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    '''
+    
+    st.markdown(pwa_html, unsafe_allow_html=True)
+
+configure_pwa()
 
 # Page configuration
 st.set_page_config(
