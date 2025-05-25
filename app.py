@@ -900,63 +900,66 @@ def main():
         st.subheader("📍 Interactive Map")
         
         try:
-            # Create and display map with better error handling
-            river_map, flow_result = create_map(calculator, selected_dam, miles_downstream)
-            
-            # Simple map display without complex state management
-            map_data = st_folium(
-                river_map, 
-                width=700, 
-                height=500,
-                key=f"river_map_{selected_dam}_{int(miles_downstream)}"
-            )
-            
-        except Exception as e:
-            st.error(f"🗺️ Map temporarily unavailable: {str(e)}")
-            st.info("Flow calculations are still available below. Map will reload automatically.")
-            
-            # Create basic flow result for display
+            # Create and display map - with detailed error catching
             try:
-                dam_data = calculator.dams[selected_dam]
-                flow_data = calculator.get_usgs_flow_data(dam_data['usgs_site'])
+                river_map, flow_result = create_map(calculator, selected_dam, miles_downstream)
                 
-                if flow_data:
-                    current_flow = flow_data['flow_cfs']
-                    flow_available = True
-                    timestamp = flow_data['timestamp']
-                else:
-                    current_flow = dam_data['capacity_cfs'] * 0.4
-                    flow_available = False
-                    timestamp = datetime.now().isoformat()
+                # Simple map display without complex state management
+                map_data = st_folium(
+                    river_map, 
+                    width=700, 
+                    height=500,
+                    key=f"river_map_{selected_dam}_{int(miles_downstream)}"
+                )
                 
-                # Calculate user flow with attenuation
-                if miles_downstream > 0:
-                    attenuation = math.exp(-miles_downstream / 100)
-                    user_flow = current_flow * attenuation
-                    travel_time = miles_downstream / 3.0
-                else:
-                    user_flow = current_flow
-                    travel_time = 0
+            except Exception as map_error:
+                st.error(f"🗺️ Map creation failed: {str(map_error)}")
                 
-                # Get coordinates
-                user_lat, user_lon = calculator.get_coordinates_from_downstream_distance(selected_dam, miles_downstream)
-                dam_lat, dam_lon = dam_data['lat'], dam_data['lon']
-                
-                flow_result = {
-                    'current_flow_at_dam': current_flow,
-                    'flow_at_user_location': user_flow,
-                    'travel_miles': miles_downstream,
-                    'travel_time_hours': travel_time,
-                    'arrival_time': datetime.now() + timedelta(hours=travel_time),
-                    'data_timestamp': timestamp,
-                    'user_coordinates': (user_lat, user_lon),
-                    'dam_coordinates': (dam_lat, dam_lon),
-                    'flow_data_available': flow_available
-                }
-                
-            except Exception as e2:
-                st.error(f"Unable to calculate flow data: {str(e2)}")
-                return
+                # Try to create flow result manually
+                try:
+                    dam_data = calculator.dams[selected_dam]
+                    
+                    # Simple flow calculation
+                    current_flow = 50000  # Default value
+                    try:
+                        flow_data = calculator.get_usgs_flow_data(dam_data['usgs_site'])
+                        if flow_data and 'flow_cfs' in flow_data:
+                            current_flow = flow_data['flow_cfs']
+                    except:
+                        pass  # Use default
+                    
+                    # Simple user flow calculation
+                    if miles_downstream > 0:
+                        user_flow = current_flow * 0.9  # Simple attenuation
+                        travel_time = miles_downstream / 3.0
+                    else:
+                        user_flow = current_flow
+                        travel_time = 0
+                    
+                    # Simple coordinate calculation
+                    dam_lat, dam_lon = dam_data['lat'], dam_data['lon']
+                    user_lat = dam_lat - (0.002 * miles_downstream)
+                    user_lon = dam_lon - (0.008 * miles_downstream)
+                    
+                    flow_result = {
+                        'current_flow_at_dam': current_flow,
+                        'flow_at_user_location': user_flow,
+                        'travel_miles': miles_downstream,
+                        'travel_time_hours': travel_time,
+                        'arrival_time': datetime.now() + timedelta(hours=travel_time),
+                        'data_timestamp': datetime.now().isoformat(),
+                        'user_coordinates': (user_lat, user_lon),
+                        'dam_coordinates': (dam_lat, dam_lon),
+                        'flow_data_available': False
+                    }
+                    
+                except Exception as calc_error:
+                    st.error(f"Flow calculation also failed: {str(calc_error)}")
+                    return
+            
+        except Exception as outer_error:
+            st.error(f"Outer error: {str(outer_error)}")
+            return
     
     with col2:
         st.subheader("📊 Flow Information")
@@ -1098,4 +1101,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-    
