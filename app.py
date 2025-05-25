@@ -706,11 +706,11 @@ def get_calculator():
     """Cached calculator instance - uses cache_resource for non-serializable objects"""
     return CumberlandRiverFlowCalculator()
 
-def create_map(calculator, selected_dam, user_mile):
-    """Create interactive map with dam and user location - improved error handling"""
+def create_map(calculator, selected_dam, miles_downstream):
+    """Create interactive map with dam and user location using downstream distance"""
     try:
-        # Calculate flow and get coordinates
-        result = calculator.calculate_flow_with_timing(selected_dam, user_mile)
+        # Calculate flow and get coordinates using downstream distance
+        result = calculator.calculate_flow_with_timing_downstream(selected_dam, miles_downstream)
         user_lat, user_lon = result['user_coordinates']
         dam_lat, dam_lon = result['dam_coordinates']
         dam_data = calculator.dams[selected_dam]
@@ -731,14 +731,14 @@ def create_map(calculator, selected_dam, user_mile):
         
         # Simple zoom calculation based on distance
         distance = calculator.calculate_distance_miles(user_lat, user_lon, dam_lat, dam_lon)
-        if distance < 10:
-            zoom_level = 11
-        elif distance < 50:
+        if distance < 5:
+            zoom_level = 12
+        elif distance < 15:
+            zoom_level = 10
+        elif distance < 30:
             zoom_level = 9
-        elif distance < 100:
-            zoom_level = 8
         else:
-            zoom_level = 7
+            zoom_level = 8
         
         # Create map with error handling
         m = folium.Map(
@@ -750,8 +750,8 @@ def create_map(calculator, selected_dam, user_mile):
         # Add dam marker with safe tooltip
         dam_tooltip = f"""
         <b>{selected_dam}</b><br>
-        River Mile: {dam_data['river_mile']}<br>
-        Current Release: {result['current_flow_at_dam']:.0f} cfs
+        Current Release: {result['current_flow_at_dam']:.0f} cfs<br>
+        You are {miles_downstream:.1f} miles downstream
         """
         
         folium.Marker(
@@ -764,7 +764,7 @@ def create_map(calculator, selected_dam, user_mile):
         # Add user location marker with safe tooltip
         user_tooltip = f"""
         <b>Your Location</b><br>
-        River Mile: {user_mile}<br>
+        {miles_downstream:.1f} miles downstream from {selected_dam}<br>
         Calculated Flow: {result['flow_at_user_location']:.0f} cfs
         """
         
@@ -775,13 +775,14 @@ def create_map(calculator, selected_dam, user_mile):
             icon=folium.Icon(color='red', icon='info-sign')
         ).add_to(m)
         
-        # Draw simple line between points
-        if result['travel_miles'] > 0:
+        # Draw line showing downstream path
+        if miles_downstream > 0:
             folium.PolyLine(
                 locations=[[dam_lat, dam_lon], [user_lat, user_lon]],
                 color='blue',
                 weight=3,
-                opacity=0.7
+                opacity=0.7,
+                popup=f"~{miles_downstream:.1f} miles downstream"
             ).add_to(m)
         
         return m, result
@@ -795,9 +796,9 @@ def create_map(calculator, selected_dam, user_mile):
         result = {
             'current_flow_at_dam': 50000,
             'flow_at_user_location': 45000,
-            'travel_miles': 20.0,
-            'travel_time_hours': 6.7,
-            'arrival_time': datetime.now() + timedelta(hours=6.7),
+            'travel_miles': miles_downstream,
+            'travel_time_hours': miles_downstream / 3.0,
+            'arrival_time': datetime.now() + timedelta(hours=miles_downstream / 3.0),
             'data_timestamp': datetime.now().isoformat(),
             'user_coordinates': (fallback_lat, fallback_lon),
             'dam_coordinates': (fallback_lat + 0.1, fallback_lon + 0.1),
@@ -850,16 +851,15 @@ def main():
         key="dam_selector"
     )
     
-    # Mile marker input
-    dam_mile = calculator.dams[selected_dam]['river_mile']
-    user_mile = st.sidebar.number_input(
-        "Your River Mile Marker:",
+    # Mile marker input - changed to downstream distance
+    miles_downstream = st.sidebar.number_input(
+        "Miles Downstream from Dam:",
         min_value=0.0,
-        max_value=500.0,
-        value=max(0.0, dam_mile - 20.0),  # Default 20 miles downstream
-        step=0.1,
-        help="Enter the river mile marker closest to your location",
-        key="mile_input"
+        max_value=100.0,
+        value=10.0,  # Default 10 miles downstream
+        step=0.5,
+        help="Enter how many miles downstream from the selected dam you are located",
+        key="miles_downstream_input"
     )
     
     # Simple refresh button
@@ -898,7 +898,7 @@ def main():
     
     # Enhanced sidebar info
     st.sidebar.markdown("---")
-    st.sidebar.info("💡 **Accurate:** Using precise dam coordinates and actual river path distances!")
+    st.sidebar.info("💡 **Intuitive:** Simply enter how many miles downstream from your chosen dam you are located!")
     
     # Main content area
     col1, col2 = st.columns([2, 1])
@@ -908,14 +908,14 @@ def main():
         
         try:
             # Create and display map with better error handling
-            river_map, flow_result = create_map(calculator, selected_dam, user_mile)
+            river_map, flow_result = create_map(calculator, selected_dam, miles_downstream)
             
             # Simple map display without complex state management
             map_data = st_folium(
                 river_map, 
                 width=700, 
                 height=500,
-                key=f"river_map_{selected_dam}_{int(user_mile)}"
+                key=f"river_map_{selected_dam}_{int(miles_downstream)}"
             )
             
         except Exception as e:
@@ -924,7 +924,7 @@ def main():
             
             # Still calculate flow data for display
             try:
-                flow_result = calculator.calculate_flow_with_timing(selected_dam, user_mile)
+                flow_result = calculator.calculate_flow_with_timing_downstream(selected_dam, miles_downstream)
             except Exception as e2:
                 st.error("Unable to calculate flow data")
                 return
@@ -970,17 +970,16 @@ def main():
             dam_info = calculator.dams[selected_dam]
             st.write(f"**Selected Dam:** {selected_dam}")
             st.write(f"**Official Name:** {dam_info.get('official_name', 'N/A')}")
-            st.write(f"**Dam River Mile:** {dam_info['river_mile']}")
+            st.write(f"**Your Distance:** {miles_downstream:.1f} miles downstream")
             st.write(f"**Dam Elevation:** {dam_info['elevation_ft']:.0f} ft")
             st.write(f"**Dam Coordinates:** {dam_info['lat']:.4f}, {dam_info['lon']:.4f}")
-            st.write(f"**Your River Mile:** {user_mile}")
             st.write(f"**Your Coordinates:** {flow_result['user_coordinates'][0]:.4f}, {flow_result['user_coordinates'][1]:.4f}")
             
             if flow_result['travel_time_hours'] > 0:
                 st.write(f"**Travel Time:** {flow_result['travel_time_hours']:.1f} hours")
                 st.write(f"**Average Flow Velocity:** ~3.0 mph")
             else:
-                st.info("🔼 You are upstream of the selected dam.")
+                st.info("🎯 You are at the dam location.")
             
             # Enhanced data timestamp with API status
             if flow_result['flow_data_available']:
@@ -997,14 +996,14 @@ def main():
                     flow_result['user_coordinates'][0], flow_result['user_coordinates'][1],
                     flow_result['dam_coordinates'][0], flow_result['dam_coordinates'][1]
                 )
-                st.write(f"**River Path Distance:** {flow_result['travel_miles']:.1f} miles")
+                st.write(f"**Downstream Distance:** {flow_result['travel_miles']:.1f} miles")
                 st.write(f"**Straight-Line Distance:** {straight_line_dist:.1f} miles")
                 if straight_line_dist > 0:
                     st.write(f"**River Meander Factor:** {flow_result['travel_miles']/straight_line_dist:.2f}x")
-                st.caption("🌊 Using actual river path for accurate flow timing")
+                st.caption("🌊 Using downstream distance from selected dam with simulated river meandering")
             else:
-                st.write("**Method:** Direct dam location analysis")
-                st.caption("🔼 You are upstream of the selected dam")
+                st.write("**Method:** Located at dam")
+                st.caption("🎯 You are at the dam location")
             
         except Exception as e:
             st.error(f"🔢 Error calculating flow: {str(e)}")
