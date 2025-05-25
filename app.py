@@ -773,7 +773,7 @@ def main():
     
     if not calculator or not calculator.dams:
         st.error("❌ Unable to load dam data. Please refresh the page.")
-        if st.button("🔄 Retry"):
+        if st.button("🔄 Retry", key="retry_button"):
             if 'calculator' in st.session_state:
                 del st.session_state.calculator
             st.rerun()
@@ -856,7 +856,8 @@ def main():
         "Select Closest Dam:",
         dam_names,
         index=min(3, len(dam_names)-1),  # Default to Old Hickory Dam or last available
-        help="Choose the dam closest to your location"
+        help="Choose the dam closest to your location",
+        key="dam_selector"
     )
     
     # Mile marker input
@@ -867,11 +868,12 @@ def main():
         max_value=500.0,
         value=max(0.0, dam_mile - 20.0),  # Default 20 miles downstream
         step=0.1,
-        help="Enter the river mile marker closest to your location"
+        help="Enter the river mile marker closest to your location",
+        key="mile_input"
     )
     
     # Simple refresh button
-    if st.sidebar.button("🔄 Refresh Data", type="primary"):
+    if st.sidebar.button("🔄 Refresh Data", type="primary", key="refresh_button"):
         st.cache_data.clear()
         if 'calculator' in st.session_state:
             del st.session_state.calculator
@@ -896,7 +898,7 @@ def main():
                 river_map, 
                 width=700, 
                 height=500,
-                key=f"map_{selected_dam}_{user_mile}"
+                key=f"river_map_{selected_dam}_{int(user_mile)}"
             )
             
         except Exception as e:
@@ -1019,7 +1021,7 @@ def main():
     """)
     
     # Add troubleshooting section
-    with st.expander("🔧 Troubleshooting"):
+    with st.expander("🔧 Troubleshooting", expanded=False):
         st.markdown("""
         **If you encounter issues:**
         
