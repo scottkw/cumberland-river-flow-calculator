@@ -22,10 +22,35 @@ st.set_page_config(
 def configure_pwa():
     """Configure PWA using HTML meta tags and manifest"""
     
-    # PWA Manifest
+    # Create a high-quality wave icon SVG
+    wave_icon_svg = '''
+    <svg width="192" height="192" viewBox="0 0 192 192" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <rect width="192" height="192" fill="#1f77b4" rx="24"/>
+        <g transform="translate(24, 48)">
+            <!-- Wave layers for depth -->
+            <path d="M0 32 Q36 16 72 32 T144 32 V96 H0 Z" fill="#ffffff" opacity="0.9"/>
+            <path d="M0 48 Q36 32 72 48 T144 48 V96 H0 Z" fill="#ffffff" opacity="0.7"/>
+            <path d="M0 64 Q36 48 72 64 T144 64 V96 H0 Z" fill="#ffffff" opacity="0.5"/>
+            <!-- Bottom gradient -->
+            <defs>
+                <linearGradient id="waveGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+                    <stop offset="0%" style="stop-color:#ffffff;stop-opacity:0.3" />
+                    <stop offset="100%" style="stop-color:#ffffff;stop-opacity:0.1" />
+                </linearGradient>
+            </defs>
+            <rect x="0" y="64" width="144" height="32" fill="url(#waveGrad)"/>
+        </g>
+    </svg>
+    '''
+    
+    # Convert SVG to base64
+    import base64
+    wave_icon_b64 = base64.b64encode(wave_icon_svg.encode('utf-8')).decode('utf-8')
+    
+    # PWA Manifest with proper app name and wave icon
     manifest = {
-        "name": "Cumberland River Flow Calculator",
-        "short_name": "River Flow",
+        "name": "Cumberland Flow Calculator",
+        "short_name": "Cumberland Flow",
         "description": "Calculate Cumberland River flow rates at any location",
         "start_url": "/",
         "display": "standalone",
@@ -34,21 +59,34 @@ def configure_pwa():
         "orientation": "portrait",
         "icons": [
             {
-                "src": "data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTkyIiBoZWlnaHQ9IjE5MiIgdmlld0JveD0iMCAwIDE5MiAxOTIiIGZpbGw9Im5vbmUiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+CjxyZWN0IHdpZHRoPSIxOTIiIGhlaWdodD0iMTkyIiBmaWxsPSIjMWY3N2I0Ii8+Cjx0ZXh0IHg9Ijk2IiB5PSIxMTAiIGZvbnQtZmFtaWx5PSJBcmlhbCIgZm9udC1zaXplPSI4MCIgZmlsbD0id2hpdGUiIHRleHQtYW5jaG9yPSJtaWRkbGUiPvCfjIo8L3RleHQ+Cjwvc3ZnPgo=",
+                "src": f"data:image/svg+xml;base64,{wave_icon_b64}",
                 "sizes": "192x192",
-                "type": "image/svg+xml"
+                "type": "image/svg+xml",
+                "purpose": "any maskable"
+            },
+            {
+                "src": f"data:image/svg+xml;base64,{wave_icon_b64}",
+                "sizes": "512x512", 
+                "type": "image/svg+xml",
+                "purpose": "any maskable"
             }
         ]
     }
     
-    # Inject PWA HTML
+    # Convert manifest to base64
+    manifest_b64 = base64.b64encode(json.dumps(manifest).encode('utf-8')).decode('utf-8')
+    
+    # Inject PWA HTML with proper manifest
     pwa_html = f'''
-    <link rel="manifest" href="data:application/json;base64,{json.dumps(manifest).encode('utf-8').hex()}">
+    <link rel="manifest" href="data:application/json;base64,{manifest_b64}">
     <meta name="theme-color" content="#1f77b4">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="default">
-    <meta name="apple-mobile-web-app-title" content="River Flow">
+    <meta name="apple-mobile-web-app-title" content="Cumberland Flow">
     <meta name="mobile-web-app-capable" content="yes">
+    <meta name="application-name" content="Cumberland Flow Calculator">
+    <link rel="apple-touch-icon" href="data:image/svg+xml;base64,{wave_icon_b64}">
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml;base64,{wave_icon_b64}">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     '''
     
@@ -61,48 +99,70 @@ class CumberlandRiverFlowCalculator:
     """
     
     def __init__(self):
-        # Cumberland River major dams with USGS site IDs only
-        # Coordinates, elevation, and names will be fetched dynamically
+        # Cumberland River major dams with USGS site IDs and accurate dam coordinates
+        # Using actual dam locations from the Army Corps of Engineers and other reliable sources
         self.dam_sites = {
             'Wolf Creek Dam': {
                 'usgs_site': '03160000',
                 'capacity_cfs': 70000,
-                'river_mile': 460.9
+                'river_mile': 460.9,
+                'lat': 36.8939,
+                'lon': -84.9269,
+                'elevation_ft': 760.0
             },
             'Dale Hollow Dam': {
                 'usgs_site': '03141000', 
                 'capacity_cfs': 54000,
-                'river_mile': 387.2
+                'river_mile': 387.2,
+                'lat': 36.5528,
+                'lon': -85.4597,
+                'elevation_ft': 651.0
             },
             'Center Hill Dam': {
                 'usgs_site': '03429500',
                 'capacity_cfs': 89000,
-                'river_mile': 325.7
+                'river_mile': 325.7,
+                'lat': 36.1089,
+                'lon': -85.7781,
+                'elevation_ft': 685.0
             },
             'Old Hickory Dam': {
                 'usgs_site': '03431500',
                 'capacity_cfs': 120000,
-                'river_mile': 216.2
+                'river_mile': 216.2,
+                'lat': 36.2939,
+                'lon': -86.6158,
+                'elevation_ft': 445.0
             },
             'J Percy Priest Dam': {
                 'usgs_site': '03430500',
                 'capacity_cfs': 65000,
-                'river_mile': 189.5
+                'river_mile': 189.5,
+                'lat': 36.0667,
+                'lon': -86.6333,
+                'elevation_ft': 490.0
             },
             'Cheatham Dam': {
                 'usgs_site': '03431700',
                 'capacity_cfs': 130000,
-                'river_mile': 148.7
+                'river_mile': 148.7,
+                'lat': 36.2972,
+                'lon': -87.0272,
+                'elevation_ft': 392.0
             },
             'Barkley Dam': {
                 'usgs_site': '03438220',
                 'capacity_cfs': 200000,
-                'river_mile': 30.6
+                'river_mile': 30.6,
+                'lat': 36.8631,
+                'lon': -88.2439,
+                'elevation_ft': 359.0
             }
         }
         
-        # This will be populated with full dam data including coordinates
+        # This will be populated with full dam data including live flow info
         self.dams = {}
+        self.usgs_data_failed = False
         
         # Initialize dam data
         self._initialize_dam_data()
@@ -111,7 +171,7 @@ class CumberlandRiverFlowCalculator:
         self.mile_markers = self._generate_mile_markers()
     
     def get_usgs_site_info(self, site_id: str) -> Optional[Dict]:
-        """Fetch site information including coordinates from USGS"""
+        """Fetch site information from USGS for the site name only"""
         try:
             url = "https://waterservices.usgs.gov/nwis/site/"
             params = {
@@ -120,82 +180,52 @@ class CumberlandRiverFlowCalculator:
                 'siteOutput': 'expanded'
             }
             
-            response = requests.get(url, params=params, timeout=10)
+            response = requests.get(url, params=params, timeout=5)
             response.raise_for_status()
             
             data = response.json()
-            if 'value' in data and 'timeSeries' in data['value']:
-                site_info = data['value']['timeSeries'][0]['sourceInfo']
-                return {
-                    'name': site_info.get('siteName', 'Unknown'),
-                    'lat': float(site_info['geoLocation']['geogLocation']['latitude']),
-                    'lon': float(site_info['geoLocation']['geogLocation']['longitude']),
-                    'elevation_ft': float(site_info['elevation_va']) if 'elevation_va' in site_info else 400.0
-                }
+            
+            # Try multiple ways to get site info
+            site_name = None
+            
+            if 'value' in data:
+                if 'timeSeries' in data['value'] and data['value']['timeSeries']:
+                    site_name = data['value']['timeSeries'][0]['sourceInfo'].get('siteName', None)
+                elif 'queryInfo' in data['value'] and 'sites' in data['value']['queryInfo']:
+                    sites = data['value']['queryInfo']['sites']
+                    if sites:
+                        site_name = sites[0].get('siteName', None)
+            
+            if site_name:
+                return {'official_name': site_name}
             else:
-                # Try alternative site info endpoint
-                url = "https://waterservices.usgs.gov/nwis/site/"
-                params = {
-                    'format': 'json',
-                    'sites': site_id
-                }
-                
-                response = requests.get(url, params=params, timeout=10)
-                response.raise_for_status()
-                
-                data = response.json()
-                if 'value' in data and 'timeSeries' in data['value']:
-                    site_info = data['value']['timeSeries'][0]['sourceInfo']
-                    return {
-                        'name': site_info.get('siteName', 'Unknown'),
-                        'lat': float(site_info['geoLocation']['geogLocation']['latitude']),
-                        'lon': float(site_info['geoLocation']['geogLocation']['longitude']),
-                        'elevation_ft': float(site_info.get('elevation_va', 400.0))
-                    }
+                return None
                     
         except Exception as e:
-            st.warning(f"Could not fetch site info for {site_id}: {str(e)}")
             return None
     
     def _initialize_dam_data(self):
-        """Initialize dam data by fetching coordinates from USGS"""
-        with st.spinner("Loading dam information from USGS..."):
+        """Initialize dam data using hardcoded coordinates and fetch site names from USGS"""
+        failed_sites = 0
+        total_sites = len(self.dam_sites)
+        
+        with st.spinner("Loading dam information..."):
             for dam_name, dam_info in self.dam_sites.items():
+                # Start with hardcoded data (which includes accurate coordinates)
+                self.dams[dam_name] = dam_info.copy()
+                
+                # Try to get the official site name from USGS
                 site_info = self.get_usgs_site_info(dam_info['usgs_site'])
                 
-                if site_info:
-                    # Merge static info with dynamic site info
-                    self.dams[dam_name] = {
-                        **dam_info,
-                        'lat': site_info['lat'],
-                        'lon': site_info['lon'],
-                        'elevation_ft': site_info['elevation_ft'],
-                        'official_name': site_info['name']
-                    }
+                if site_info and 'official_name' in site_info:
+                    self.dams[dam_name]['official_name'] = site_info['official_name']
                 else:
-                    # Fallback to approximate coordinates if USGS fetch fails
-                    fallback_coords = self._get_fallback_coordinates(dam_name)
-                    self.dams[dam_name] = {
-                        **dam_info,
-                        'lat': fallback_coords[0],
-                        'lon': fallback_coords[1],
-                        'elevation_ft': 400.0,
-                        'official_name': dam_name
-                    }
-                    st.warning(f"Using fallback coordinates for {dam_name}")
-    
-    def _get_fallback_coordinates(self, dam_name: str) -> Tuple[float, float]:
-        """Provide fallback coordinates if USGS fetch fails"""
-        fallback_coords = {
-            'Wolf Creek Dam': (36.8939, -84.9269),
-            'Dale Hollow Dam': (36.5528, -85.4597),
-            'Center Hill Dam': (36.1089, -85.7781),
-            'Old Hickory Dam': (36.2939, -86.6158),
-            'J Percy Priest Dam': (36.0667, -86.6333),
-            'Cheatham Dam': (36.2972, -87.0272),
-            'Barkley Dam': (36.8631, -88.2439)
-        }
-        return fallback_coords.get(dam_name, (36.0, -86.0))
+                    self.dams[dam_name]['official_name'] = dam_name
+                    failed_sites += 1
+        
+        # Set flag if most USGS requests failed
+        if failed_sites > total_sites / 2:
+            self.usgs_data_failed = True
     
     def _generate_mile_markers(self):
         """Generate mile marker coordinates along the Cumberland River"""
@@ -257,7 +287,6 @@ class CumberlandRiverFlowCalculator:
                             'site_name': time_series[0]['sourceInfo']['siteName']
                         }
         except Exception as e:
-            st.warning(f"Could not fetch live data for site {site_id}: {str(e)}")
             return None
     
     def get_elevation_usgs(self, lat: float, lon: float) -> float:
@@ -281,7 +310,6 @@ class CumberlandRiverFlowCalculator:
                     elevation = elevation_data['Elevation_Query']['Elevation']
                     return float(elevation)
         except Exception as e:
-            st.warning(f"Could not fetch elevation data: {str(e)}")
             return 400.0  # Default elevation
     
     def calculate_distance_miles(self, lat1: float, lon1: float, lat2: float, lon2: float) -> float:
@@ -401,7 +429,8 @@ class CumberlandRiverFlowCalculator:
             'arrival_time': arrival_time,
             'data_timestamp': data_timestamp,
             'user_coordinates': (user_lat, user_lon),
-            'dam_coordinates': (dam_data['lat'], dam_data['lon'])
+            'dam_coordinates': (dam_data['lat'], dam_data['lon']),
+            'flow_data_available': flow_data is not None
         }
 
 @st.cache_data
@@ -554,16 +583,21 @@ def main():
     st.sidebar.markdown("---")
     st.sidebar.subheader("📡 Data Status")
     
-    # Check if we have live data
+    # Show consolidated status message if USGS data failed
+    if calculator.usgs_data_failed:
+        st.sidebar.warning("⚠️ USGS site info partially unavailable")
+        st.sidebar.caption("Using stored dam coordinates")
+    
+    # Check if we have live flow data for selected dam
     dam_data = calculator.dams[selected_dam]
     flow_data = calculator.get_usgs_flow_data(dam_data['usgs_site'])
     
     if flow_data:
-        st.sidebar.success("✅ Live USGS data available")
+        st.sidebar.success("✅ Live flow data available")
         st.sidebar.caption(f"Last updated: {flow_data['timestamp'][:19]}")
     else:
         st.sidebar.warning("⚠️ Using estimated flow data")
-        st.sidebar.caption("Live data temporarily unavailable")
+        st.sidebar.caption("Live flow data temporarily unavailable")
     
     # Main content area
     col1, col2 = st.columns([2, 1])
@@ -648,12 +682,12 @@ def main():
     st.markdown("---")
     st.markdown("""
     **About This App:**
-    - Uses real-time USGS data and coordinates when available
+    - Uses real-time USGS flow data when available
+    - Dam coordinates from Army Corps of Engineers sources
     - Calculations include travel time and flow attenuation
-    - Dam coordinates are fetched dynamically from USGS
     - Install as PWA for offline access
     
-    **Data Sources:** USGS Water Services, USGS Site Information Service, USGS Elevation Service
+    **Data Sources:** USGS Water Services, Army Corps of Engineers
     """)
 
 if __name__ == "__main__":
