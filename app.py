@@ -987,7 +987,7 @@ def main():
             except Exception as map_error:
                 st.error(f"🗺️ Map creation failed: {str(map_error)}")
                 
-                # Try to create flow result manually
+                # Create basic flow result manually WITHOUT calling any calculator methods
                 try:
                     dam_data = calculator.dams[selected_dam]
                     
@@ -1008,10 +1008,17 @@ def main():
                         user_flow = current_flow
                         travel_time = 0
                     
-                    # Simple coordinate calculation
+                    # Simple coordinate calculation - DIRECTLY HERE, no method calls
                     dam_lat, dam_lon = dam_data['lat'], dam_data['lon']
-                    user_lat = dam_lat - (0.002 * miles_downstream)
-                    user_lon = dam_lon - (0.008 * miles_downstream)
+                    if miles_downstream <= 0:
+                        user_lat, user_lon = dam_lat, dam_lon
+                    else:
+                        user_lat = dam_lat - (0.002 * min(miles_downstream, 25))
+                        user_lon = dam_lon - (0.008 * min(miles_downstream, 25))
+                        
+                        # Validate bounds
+                        if not (35.0 <= user_lat <= 38.0 and -89.0 <= user_lon <= -84.0):
+                            user_lat, user_lon = dam_lat, dam_lon
                     
                     flow_result = {
                         'current_flow_at_dam': current_flow,
