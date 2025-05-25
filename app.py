@@ -912,14 +912,50 @@ def main():
             )
             
         except Exception as e:
-            st.error(f"🗺️ Map temporarily unavailable")
+            st.error(f"🗺️ Map temporarily unavailable: {str(e)}")
             st.info("Flow calculations are still available below. Map will reload automatically.")
             
-            # Still calculate flow data for display
+            # Create basic flow result for display
             try:
-                flow_result = calculator.calculate_flow_with_timing_downstream(selected_dam, miles_downstream)
+                dam_data = calculator.dams[selected_dam]
+                flow_data = calculator.get_usgs_flow_data(dam_data['usgs_site'])
+                
+                if flow_data:
+                    current_flow = flow_data['flow_cfs']
+                    flow_available = True
+                    timestamp = flow_data['timestamp']
+                else:
+                    current_flow = dam_data['capacity_cfs'] * 0.4
+                    flow_available = False
+                    timestamp = datetime.now().isoformat()
+                
+                # Calculate user flow with attenuation
+                if miles_downstream > 0:
+                    attenuation = math.exp(-miles_downstream / 100)
+                    user_flow = current_flow * attenuation
+                    travel_time = miles_downstream / 3.0
+                else:
+                    user_flow = current_flow
+                    travel_time = 0
+                
+                # Get coordinates
+                user_lat, user_lon = calculator.get_coordinates_from_downstream_distance(selected_dam, miles_downstream)
+                dam_lat, dam_lon = dam_data['lat'], dam_data['lon']
+                
+                flow_result = {
+                    'current_flow_at_dam': current_flow,
+                    'flow_at_user_location': user_flow,
+                    'travel_miles': miles_downstream,
+                    'travel_time_hours': travel_time,
+                    'arrival_time': datetime.now() + timedelta(hours=travel_time),
+                    'data_timestamp': timestamp,
+                    'user_coordinates': (user_lat, user_lon),
+                    'dam_coordinates': (dam_lat, dam_lon),
+                    'flow_data_available': flow_available
+                }
+                
             except Exception as e2:
-                st.error("Unable to calculate flow data")
+                st.error(f"Unable to calculate flow data: {str(e2)}")
                 return
     
     with col2:
