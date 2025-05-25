@@ -162,16 +162,17 @@ class CumberlandRiverFlowCalculator:
         
         # This will be populated with full dam data including live flow info
         self.dams = {}
-        self.usgs_data_failed = False
+        self.usgs_site_info_failed = False
+        self.failed_site_count = 0
         
-        # Initialize dam data
+        # Initialize dam data (silently)
         self._initialize_dam_data()
         
         # River mile to coordinate mapping (approximate)
         self.mile_markers = self._generate_mile_markers()
     
     def get_usgs_site_info(self, site_id: str) -> Optional[Dict]:
-        """Fetch site information from USGS for the site name only"""
+        """Fetch site information from USGS for the site name only - silent version"""
         try:
             url = "https://waterservices.usgs.gov/nwis/site/"
             params = {
@@ -202,30 +203,31 @@ class CumberlandRiverFlowCalculator:
                 return None
                     
         except Exception as e:
+            # Silently fail - don't display individual errors
             return None
     
     def _initialize_dam_data(self):
-        """Initialize dam data using hardcoded coordinates and fetch site names from USGS"""
+        """Initialize dam data using hardcoded coordinates and fetch site names from USGS (silently)"""
         failed_sites = 0
         total_sites = len(self.dam_sites)
         
-        with st.spinner("Loading dam information..."):
-            for dam_name, dam_info in self.dam_sites.items():
-                # Start with hardcoded data (which includes accurate coordinates)
-                self.dams[dam_name] = dam_info.copy()
-                
-                # Try to get the official site name from USGS
-                site_info = self.get_usgs_site_info(dam_info['usgs_site'])
-                
-                if site_info and 'official_name' in site_info:
-                    self.dams[dam_name]['official_name'] = site_info['official_name']
-                else:
-                    self.dams[dam_name]['official_name'] = dam_name
-                    failed_sites += 1
+        # Initialize all dams with hardcoded data first
+        for dam_name, dam_info in self.dam_sites.items():
+            self.dams[dam_name] = dam_info.copy()
+            self.dams[dam_name]['official_name'] = dam_name  # Default to dam name
         
-        # Set flag if most USGS requests failed
-        if failed_sites > total_sites / 2:
-            self.usgs_data_failed = True
+        # Try to get official site names (silently)
+        for dam_name, dam_info in self.dam_sites.items():
+            site_info = self.get_usgs_site_info(dam_info['usgs_site'])
+            
+            if site_info and 'official_name' in site_info:
+                self.dams[dam_name]['official_name'] = site_info['official_name']
+            else:
+                failed_sites += 1
+        
+        # Set status flags for sidebar display
+        self.failed_site_count = failed_sites
+        self.usgs_site_info_failed = failed_sites > total_sites / 2
     
     def _generate_mile_markers(self):
         """Generate mile marker coordinates along the Cumberland River"""
@@ -535,16 +537,15 @@ def main():
     if 'map_zoom' not in st.session_state:
         st.session_state.map_zoom = 9
     
-    # Initialize calculator
-    try:
-        calculator = get_calculator()
-        
-        if not calculator.dams:
-            st.error("Unable to load dam data. Please check your internet connection and try refreshing.")
-            return
-            
-    except Exception as e:
-        st.error(f"Error initializing calculator: {str(e)}")
+    # Initialize calculator with a loading message only during first load
+    if 'calculator' not in st.session_state:
+        with st.spinner("Loading dam information..."):
+            st.session_state.calculator = get_calculator()
+    
+    calculator = st.session_state.calculator
+    
+    if not calculator.dams:
+        st.error("Unable to load dam data. Please check your internet connection and try refreshing.")
         return
     
     # Sidebar controls
@@ -577,16 +578,20 @@ def main():
     # Add refresh button
     if st.sidebar.button("🔄 Refresh Data", type="primary"):
         st.cache_data.clear()
+        if 'calculator' in st.session_state:
+            del st.session_state.calculator
         st.rerun()
     
     # Show data source status
     st.sidebar.markdown("---")
     st.sidebar.subheader("📡 Data Status")
     
-    # Show consolidated status message if USGS data failed
-    if calculator.usgs_data_failed:
-        st.sidebar.warning("⚠️ USGS site info partially unavailable")
-        st.sidebar.caption("Using stored dam coordinates")
+    # Show consolidated status message for USGS site info
+    if calculator.usgs_site_info_failed:
+        st.sidebar.warning(f"⚠️ USGS site info partially unavailable ({calculator.failed_site_count}/{len(calculator.dam_sites)} failed)")
+        st.sidebar.caption("Using stored dam coordinates and names")
+    else:
+        st.sidebar.success("✅ Dam information loaded successfully")
     
     # Check if we have live flow data for selected dam
     dam_data = calculator.dams[selected_dam]
