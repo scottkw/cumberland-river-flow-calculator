@@ -742,7 +742,7 @@ def get_calculator():
     return CumberlandRiverFlowCalculator()
 
 def create_map(calculator, selected_dam, miles_downstream):
-    """Create interactive map - simplified and robust version"""
+    """Create interactive map - completely self-contained version"""
     
     try:
         # Get dam data safely
@@ -756,13 +756,24 @@ def create_map(calculator, selected_dam, miles_downstream):
         if not (35.0 <= dam_lat <= 38.0 and -89.0 <= dam_lon <= -84.0):
             raise ValueError(f"Invalid dam coordinates: {dam_lat}, {dam_lon}")
         
-        # Calculate user coordinates with simple method
+        # Calculate user coordinates directly here (no method call)
         if miles_downstream <= 0:
             user_lat, user_lon = dam_lat, dam_lon
         else:
-            # Simple downstream calculation
-            user_lat = dam_lat - (0.002 * min(miles_downstream, 25))
-            user_lon = dam_lon - (0.008 * min(miles_downstream, 25))
+            # Simple downstream calculation - directly inline
+            lat_change_per_mile = -0.002  # Slight southward movement
+            lon_change_per_mile = -0.008  # Westward movement
+            max_miles = min(miles_downstream, 25)  # Cap at 25 miles
+            
+            user_lat = dam_lat + (lat_change_per_mile * max_miles)
+            user_lon = dam_lon + (lon_change_per_mile * max_miles)
+            
+            # Add tiny meander if needed
+            if max_miles > 5:
+                import math
+                meander = math.sin(max_miles * 0.5) * 0.005
+                user_lat += meander
+                user_lon += meander * 0.5
             
             # Validate user coordinates
             if not (35.0 <= user_lat <= 38.0 and -89.0 <= user_lon <= -84.0):
