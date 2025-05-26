@@ -207,7 +207,7 @@ class CumberlandRiverFlowCalculator:
         return lat, lon
     
     def calculate_flow_with_timing(self, selected_dam: str, user_mile: float) -> Dict:
-        """Calculate flow rate and arrival time at user location - same as previous version"""
+        """Calculate flow rate and arrival time at user location"""
         # Get dam data
         dam_data = self.dams[selected_dam]
         dam_mile = dam_data['river_mile']
@@ -253,15 +253,6 @@ class CumberlandRiverFlowCalculator:
             'dam_coordinates': (dam_data['lat'], dam_data['lon']),
             'flow_data_available': flow_data is not None
         }
-    
-    def calculate_distance_miles(self, lat1: float, lon1: float, lat2: float, lon2: float) -> float:
-        """Calculate distance between two points"""
-        R = 3959
-        lat1_rad, lon1_rad = math.radians(lat1), math.radians(lon1)
-        lat2_rad, lon2_rad = math.radians(lat2), math.radians(lon2)
-        dlat, dlon = lat2_rad - lat1_rad, lon2_rad - lon1_rad
-        a = math.sin(dlat/2)**2 + math.cos(lat1_rad) * math.cos(lat2_rad) * math.sin(dlon/2)**2
-        return R * 2 * math.asin(math.sqrt(a))
     
     def _initialize_dam_data(self):
         """Initialize dam data"""
@@ -283,102 +274,14 @@ class CumberlandRiverFlowCalculator:
         """Fetch current flow data"""
         return self.usgs_client.get_flow_data(site_id, days_back)
     
-    def calculate_flow_with_timing(self, selected_dam: str, user_mile: float) -> Dict:
-        """Calculate flow rate and arrival time at user location - same as previous version"""
-        # Get dam data
-        dam_data = self.dams[selected_dam]
-        dam_mile = dam_data['river_mile']
-        
-        # Get user coordinates
-        user_lat, user_lon = self.get_coordinates_from_mile(user_mile)
-        
-        # Get current flow data
-        flow_data = self.get_usgs_flow_data(dam_data['usgs_site'])
-        
-        if flow_data:
-            current_flow = flow_data['flow_cfs']
-            data_timestamp = flow_data['timestamp']
-        else:
-            # Use estimated flow if live data unavailable
-            current_flow = dam_data['capacity_cfs'] * 0.4
-            data_timestamp = datetime.now().isoformat()
-        
-        # Calculate travel distance and time
-        if user_mile < dam_mile:  # User is downstream
-            travel_miles = dam_mile - user_mile
-            travel_time_hours = travel_miles / 3.0  # 3 mph average flow velocity
-            arrival_time = datetime.now() + timedelta(hours=travel_time_hours)
-            
-            # Apply attenuation factor
-            attenuation = math.exp(-travel_miles / 100)
-            flow_at_location = current_flow * attenuation
-        else:
-            # User is upstream of selected dam
-            travel_miles = 0
-            travel_time_hours = 0
-            arrival_time = datetime.now()
-            flow_at_location = current_flow * 0.5  # Reduced flow upstream
-        
-        return {
-            'current_flow_at_dam': current_flow,
-            'flow_at_user_location': flow_at_location,
-            'travel_miles': travel_miles,
-            'travel_time_hours': travel_time_hours,
-            'arrival_time': arrival_time,
-            'data_timestamp': data_timestamp,
-            'user_coordinates': (user_lat, user_lon),
-            'dam_coordinates': (dam_data['lat'], dam_data['lon']),
-            'flow_data_available': flow_data is not None
-        }
-    
-    
-    def calculate_flow_with_timing(self, selected_dam: str, user_mile: float) -> Dict:
-        """Calculate flow rate and arrival time at user location - same as previous version"""
-        # Get dam data
-        dam_data = self.dams[selected_dam]
-        dam_mile = dam_data['river_mile']
-        
-        # Get user coordinates
-        user_lat, user_lon = self.get_coordinates_from_mile(user_mile)
-        
-        # Get current flow data
-        flow_data = self.get_usgs_flow_data(dam_data['usgs_site'])
-        
-        if flow_data:
-            current_flow = flow_data['flow_cfs']
-            data_timestamp = flow_data['timestamp']
-        else:
-            # Use estimated flow if live data unavailable
-            current_flow = dam_data['capacity_cfs'] * 0.4
-            data_timestamp = datetime.now().isoformat()
-        
-        # Calculate travel distance and time
-        if user_mile < dam_mile:  # User is downstream
-            travel_miles = dam_mile - user_mile
-            travel_time_hours = travel_miles / 3.0  # 3 mph average flow velocity
-            arrival_time = datetime.now() + timedelta(hours=travel_time_hours)
-            
-            # Apply attenuation factor
-            attenuation = math.exp(-travel_miles / 100)
-            flow_at_location = current_flow * attenuation
-        else:
-            # User is upstream of selected dam
-            travel_miles = 0
-            travel_time_hours = 0
-            arrival_time = datetime.now()
-            flow_at_location = current_flow * 0.5  # Reduced flow upstream
-        
-        return {
-            'current_flow_at_dam': current_flow,
-            'flow_at_user_location': flow_at_location,
-            'travel_miles': travel_miles,
-            'travel_time_hours': travel_time_hours,
-            'arrival_time': arrival_time,
-            'data_timestamp': data_timestamp,
-            'user_coordinates': (user_lat, user_lon),
-            'dam_coordinates': (dam_data['lat'], dam_data['lon']),
-            'flow_data_available': flow_data is not None
-        }
+    def calculate_distance_miles(self, lat1: float, lon1: float, lat2: float, lon2: float) -> float:
+        """Calculate distance between two points"""
+        R = 3959
+        lat1_rad, lon1_rad = math.radians(lat1), math.radians(lon1)
+        lat2_rad, lon2_rad = math.radians(lat2), math.radians(lon2)
+        dlat, dlon = lat2_rad - lat1_rad, lon2_rad - lon1_rad
+        a = math.sin(dlat/2)**2 + math.cos(lat1_rad) * math.cos(lat2_rad) * math.sin(dlon/2)**2
+        return R * 2 * math.asin(math.sqrt(a))
 
 @st.cache_resource
 def get_calculator():
@@ -404,13 +307,7 @@ def create_map(calculator, selected_dam, user_mile):
     )
     
     # Add dam marker
-    dam_tooltip = f"""<b>{selected_dam}</b><br>
-Official Name: {dam_data.get('official_name', 'N/A')}<br>
-River Mile: {dam_data['river_mile']}<br>
-Elevation: {dam_data['elevation_ft']:.0f} ft<br>
-Capacity: {dam_data['capacity_cfs']:,} cfs<br>
-Current Release: {result['current_flow_at_dam']:.0f} cfs<br>
-Data Time: {result['data_timestamp'][:19]}"""
+    dam_tooltip = f"""<b>{selected_dam}</b><br>Official Name: {dam_data.get('official_name', 'N/A')}<br>River Mile: {dam_data['river_mile']}<br>Elevation: {dam_data['elevation_ft']:.0f} ft<br>Capacity: {dam_data['capacity_cfs']:,} cfs<br>Current Release: {result['current_flow_at_dam']:.0f} cfs<br>Data Time: {result['data_timestamp'][:19]}"""
     
     folium.Marker(
         [dam_lat, dam_lon],
@@ -420,12 +317,7 @@ Data Time: {result['data_timestamp'][:19]}"""
     ).add_to(m)
     
     # Add user location marker
-    user_tooltip = f"""<b>Your Location</b><br>
-River Mile: {user_mile}<br>
-Calculated Flow: {result['flow_at_user_location']:.0f} cfs<br>
-Travel Distance: {result['travel_miles']:.1f} miles<br>
-Arrival Time: {result['arrival_time'].strftime('%I:%M %p')}<br>
-Travel Duration: {result['travel_time_hours']:.1f} hours"""
+    user_tooltip = f"""<b>Your Location</b><br>River Mile: {user_mile}<br>Calculated Flow: {result['flow_at_user_location']:.0f} cfs<br>Travel Distance: {result['travel_miles']:.1f} miles<br>Arrival Time: {result['arrival_time'].strftime('%I:%M %p')}<br>Travel Duration: {result['travel_time_hours']:.1f} hours"""
     
     folium.Marker(
         [user_lat, user_lon],
@@ -467,6 +359,7 @@ def main():
         if st.button("🔄 Retry"):
             if 'calculator' in st.session_state:
                 del st.session_state.calculator
+            st.cache_resource.clear()
             st.rerun()
         return
 
