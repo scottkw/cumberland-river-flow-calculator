@@ -276,7 +276,11 @@ class CumberlandRiverFlowCalculator:
                 ratio = (miles_downstream - p1[0]) / (p2[0] - p1[0])
                 lat = p1[1] + ratio * (p2[1] - p1[1])
                 lon = p1[2] + ratio * (p2[2] - p1[2])
-            def get_river_path_coordinates(self, dam_name: str, miles_downstream: float) -> List[Tuple[float, float]]:
+                return (lat, lon)
+        
+        return (path_points[0][1], path_points[0][2])
+    
+    def get_river_path_coordinates(self, dam_name: str, miles_downstream: float) -> List[Tuple[float, float]]:
         """Get a series of coordinates that follow the river path from dam to user location"""
         
         # Get the river path for this dam
@@ -311,8 +315,6 @@ class CumberlandRiverFlowCalculator:
         river_path.append((user_lat, user_lon))
         
         return river_path
-        
-        return (path_points[0][1], path_points[0][2])
     
     def _initialize_dam_data(self):
         """Initialize dam data"""
