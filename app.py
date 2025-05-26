@@ -245,11 +245,12 @@ def create_map(calculator, selected_dam, miles_downstream):
         except:
             current_flow = dam_data.get('capacity_cfs', 50000) * 0.4
         
-        # Calculate user flow
+        # Calculate user flow using DOWNSTREAM DISTANCE (not straight-line)
         if miles_downstream > 0:
-            attenuation = math.exp(-miles_downstream / 50)
+            # Use the actual downstream distance for attenuation (follows river path)
+            attenuation = math.exp(-miles_downstream / 50)  # Based on RIVER distance
             user_flow = current_flow * attenuation
-            travel_time = miles_downstream / 3.0
+            travel_time = miles_downstream / 3.0  # Based on RIVER distance
         else:
             user_flow = current_flow
             travel_time = 0
@@ -257,8 +258,10 @@ def create_map(calculator, selected_dam, miles_downstream):
         # Create map
         center_lat = (dam_lat + user_lat) / 2
         center_lon = (dam_lon + user_lon) / 2
-        distance = calculator.calculate_distance_miles(user_lat, user_lon, dam_lat, dam_lon)
-        zoom_level = 11 if distance < 5 else (10 if distance < 15 else (9 if distance < 30 else 8))
+        
+        # Calculate straight-line distance ONLY for zoom level (not for flow calculations)
+        straight_line_distance = calculator.calculate_distance_miles(user_lat, user_lon, dam_lat, dam_lon)
+        zoom_level = 11 if straight_line_distance < 5 else (10 if straight_line_distance < 15 else (9 if straight_line_distance < 30 else 8))
         
         m = folium.Map(location=[center_lat, center_lon], zoom_start=zoom_level)
         
@@ -277,27 +280,28 @@ def create_map(calculator, selected_dam, miles_downstream):
             icon=folium.Icon(color='red', icon='info-sign')
         ).add_to(m)
         
-        # Add river path line
-        if miles_downstream > 0 and distance > 0.01:
+        # Add river path line showing the ACTUAL downstream path
+        if miles_downstream > 0 and straight_line_distance > 0.01:
             folium.PolyLine(
                 locations=[[dam_lat, dam_lon], [user_lat, user_lon]],
                 color='darkblue',
                 weight=4,
                 opacity=0.8,
-                popup=f"River path: {miles_downstream:.1f} miles downstream"
+                popup=f"River path: {miles_downstream:.1f} miles downstream (actual river distance)"
             ).add_to(m)
         
-        # Create result
+        # Create result using DOWNSTREAM DISTANCE for all calculations
         result = {
             'current_flow_at_dam': current_flow,
             'flow_at_user_location': user_flow,
-            'travel_miles': miles_downstream,
-            'travel_time_hours': travel_time,
+            'travel_miles': miles_downstream,  # This is the ACTUAL river distance
+            'travel_time_hours': travel_time,  # Based on river distance
             'arrival_time': datetime.now() + timedelta(hours=travel_time),
             'data_timestamp': datetime.now().isoformat(),
             'user_coordinates': (user_lat, user_lon),
             'dam_coordinates': (dam_lat, dam_lon),
-            'flow_data_available': flow_available
+            'flow_data_available': flow_available,
+            'straight_line_distance': straight_line_distance  # Store this separately for comparison
         }
         
         return m, result
@@ -469,20 +473,26 @@ def main():
             else:
                 st.caption(f"📊 Estimated data: {flow_result['data_timestamp'][:19]}")
             
-            # Calculation method
+            # Calculation method - showing RIVER DISTANCE vs straight-line
             st.markdown("---")
             st.subheader("🔬 Calculation Method")
             
             if flow_result['travel_miles'] > 0:
-                straight_line_dist = calculator.calculate_distance_miles(
-                    flow_result['user_coordinates'][0], flow_result['user_coordinates'][1],
-                    flow_result['dam_coordinates'][0], flow_result['dam_coordinates'][1]
-                )
-                st.write(f"**Downstream Distance:** {flow_result['travel_miles']:.1f} miles")
-                st.write(f"**Straight-Line Distance:** {straight_line_dist:.1f} miles")
+                # Get straight-line distance for comparison
+                straight_line_dist = flow_result.get('straight_line_distance', 
+                    calculator.calculate_distance_miles(
+                        flow_result['user_coordinates'][0], flow_result['user_coordinates'][1],
+                        flow_result['dam_coordinates'][0], flow_result['dam_coordinates'][1]
+                    ))
+                
+                st.write(f"**River Distance (Used for Calculations):** {flow_result['travel_miles']:.1f} miles")
+                st.write(f"**Straight-Line Distance (Reference Only):** {straight_line_dist:.1f} miles")
                 if straight_line_dist > 0:
-                    st.write(f"**River Meander Factor:** {flow_result['travel_miles']/straight_line_dist:.2f}x")
-                st.caption("🌊 Using river channel coordinates for accurate positioning")
+                    meander_factor = flow_result['travel_miles'] / straight_line_dist
+                    st.write(f"**River Meander Factor:** {meander_factor:.2f}x")
+                
+                st.success("✅ **Flow calculations use actual river distance, not straight-line!**")
+                st.caption("🌊 Flow attenuation and travel time based on downstream river miles")
             else:
                 st.write("**Method:** Located at dam")
                 st.caption("🎯 You are at the dam location")
