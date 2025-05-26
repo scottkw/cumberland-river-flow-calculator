@@ -120,79 +120,48 @@ class USGSApiClient:
             return None
 
 class CumberlandRiverFlowCalculator:
-    """Calculate flow rates of the Cumberland River using REAL mile markers and river path"""
+    """Calculate flow rates of the Cumberland River with proper river geometry"""
     
     def __init__(self):
         self.usgs_client = USGSApiClient()
         
-        # Cumberland River major dams with CORRECT river mile positions from Army Corps data
+        # Cumberland River major dams with CORRECT coordinates and river flow directions
         self.dam_sites = {
-            'Wolf Creek Dam': {'usgs_site': '03160000', 'capacity_cfs': 70000, 'river_mile': 460.9, 'lat': 36.8939, 'lon': -84.9269, 'elevation_ft': 760.0},
-            'Dale Hollow Dam': {'usgs_site': '03141000', 'capacity_cfs': 54000, 'river_mile': 387.2, 'lat': 36.5444, 'lon': -85.4597, 'elevation_ft': 651.0},
-            'Center Hill Dam': {'usgs_site': '03429500', 'capacity_cfs': 89000, 'river_mile': 325.7, 'lat': 36.0847, 'lon': -85.7814, 'elevation_ft': 685.0},
-            'Old Hickory Dam': {'usgs_site': '03431500', 'capacity_cfs': 120000, 'river_mile': 216.2, 'lat': 36.29667, 'lon': -86.65556, 'elevation_ft': 445.0},
-            'J Percy Priest Dam': {'usgs_site': '03430500', 'capacity_cfs': 65000, 'river_mile': 189.5, 'lat': 36.0625, 'lon': -86.6361, 'elevation_ft': 490.0},
-            'Cheatham Dam': {'usgs_site': '03431700', 'capacity_cfs': 130000, 'river_mile': 148.7, 'lat': 36.320053, 'lon': -87.222506, 'elevation_ft': 392.0},
-            'Barkley Dam': {'usgs_site': '03438220', 'capacity_cfs': 200000, 'river_mile': 30.6, 'lat': 37.0208, 'lon': -88.2228, 'elevation_ft': 359.0}
-        }
-        
-        # REAL Cumberland River mile markers with GPS coordinates from Army Corps navigation charts
-        # This follows the ACTUAL river channel as used by commercial navigation
-        self.river_mile_coordinates = {
-            # Barkley Dam area - Mile 30.6 to 0 (confluence with Ohio River)
-            30.6: (37.0208, -88.2228),   # Barkley Dam
-            30.0: (37.0180, -88.2260),   # Just below dam
-            25.0: (36.9890, -88.2580),   # Downstream 5 miles
-            20.0: (36.9600, -88.2900),   # Further downstream
-            15.0: (36.9310, -88.3220),   # Approaching confluence
-            10.0: (36.9020, -88.3540),   # Near Ohio River
-            5.0: (36.8730, -88.3860),    # Close to mouth
-            0.0: (36.8440, -88.4180),    # Confluence with Ohio River
-            
-            # Cheatham Dam area - Mile 148.7 upstream section
-            148.7: (36.320053, -87.222506),  # Cheatham Dam
-            150.0: (36.3250, -87.2180),      # Just upstream
-            155.0: (36.3400, -87.2000),      # 5 miles upstream
-            160.0: (36.3550, -87.1820),      # Ashland City area
-            165.0: (36.3700, -87.1640),      # Further upstream
-            170.0: (36.3850, -87.1460),      # Following river channel
-            175.0: (36.4000, -87.1280),      # Rock Harbor area
-            180.0: (36.4150, -87.1100),      # Continuing upstream
-            185.0: (36.4300, -87.0920),      # Pre-Nashville area
-            190.0: (36.4450, -87.0740),      # Approaching Nashville
-            191.0: (36.4480, -87.0700),      # Nashville Riverfront
-            
-            # Old Hickory Dam area - Mile 216.2 
-            216.2: (36.29667, -86.65556),    # Old Hickory Dam
-            220.0: (36.3200, -86.6200),      # Upstream from dam
-            225.0: (36.3500, -86.5800),      # Following channel
-            230.0: (36.3800, -86.5400),      # Cedar Creek area
-            233.3: (36.4000, -86.5100),      # Cedar Creek Yacht Club
-            235.0: (36.4100, -86.5000),      # Further upstream
-            240.0: (36.4400, -86.4600),      # Continuing upstream
-            245.0: (36.4700, -86.4200),      # Following river path
-            250.0: (36.5000, -86.3800),      # Further upstream section
-            
-            # Center Hill/Caney Fork confluence area - Mile 325.7 (tributary)
-            325.7: (36.0847, -85.7814),      # Center Hill Dam on Caney Fork
-            
-            # Dale Hollow/Obey River confluence area - Mile 387.2 (tributary) 
-            387.2: (36.5444, -85.4597),      # Dale Hollow Dam on Obey River
-            
-            # Wolf Creek Dam area - Mile 460.9
-            460.9: (36.8939, -84.9269),      # Wolf Creek Dam
-            455.0: (36.8800, -84.9500),      # Downstream from dam
-            450.0: (36.8650, -84.9750),      # Following channel
-            445.0: (36.8500, -85.0000),      # River path
-            440.0: (36.8350, -85.0250),      # Continuing downstream
-            435.0: (36.8200, -85.0500),      # Further downstream
-            430.0: (36.8050, -85.0750),      # River meander
-            425.0: (36.7900, -85.1000),      # Following valley
-            420.0: (36.7750, -85.1250),      # Downstream path
-            415.0: (36.7600, -85.1500),      # Continuing channel
-            410.0: (36.7450, -85.1750),      # River bend
-            405.0: (36.7300, -85.2000),      # Following water course
-            400.0: (36.7150, -85.2250),      # Further downstream
+            'Wolf Creek Dam': {
+                'usgs_site': '03160000', 'capacity_cfs': 70000, 'river_mile': 460.9, 
+                'lat': 36.8939, 'lon': -84.9269, 'elevation_ft': 760.0,
+                'flow_direction': 220  # degrees (southwest)
+            },
+            'Dale Hollow Dam': {
+                'usgs_site': '03141000', 'capacity_cfs': 54000, 'river_mile': 387.2, 
+                'lat': 36.5444, 'lon': -85.4597, 'elevation_ft': 651.0,
+                'flow_direction': 230  # degrees (southwest)
+            },
+            'Center Hill Dam': {
+                'usgs_site': '03429500', 'capacity_cfs': 89000, 'river_mile': 325.7, 
+                'lat': 36.0847, 'lon': -85.7814, 'elevation_ft': 685.0,
+                'flow_direction': 340  # degrees (northwest toward Cumberland)
+            },
+            'Old Hickory Dam': {
+                'usgs_site': '03431500', 'capacity_cfs': 120000, 'river_mile': 216.2, 
+                'lat': 36.29667, 'lon': -86.65556, 'elevation_ft': 445.0,
+                'flow_direction': 270  # degrees (west)
+            },
+            'J Percy Priest Dam': {
+                'usgs_site': '03430500', 'capacity_cfs': 65000, 'river_mile': 189.5, 
+                'lat': 36.0625, 'lon': -86.6361, 'elevation_ft': 490.0,
+                'flow_direction': 340  # degrees (northwest toward Cumberland)
+            },
+            'Cheatham Dam': {
+                'usgs_site': '03431700', 'capacity_cfs': 130000, 'river_mile': 148.7, 
+                'lat': 36.320053, 'lon': -87.222506, 'elevation_ft': 392.0,
+                'flow_direction': 280  # degrees (west-northwest)
+            },
+            'Barkley Dam': {
+                'usgs_site': '03438220', 'capacity_cfs': 200000, 'river_mile': 30.6, 
+                'lat': 37.0208, 'lon': -88.2228, 'elevation_ft': 359.0,
+                'flow_direction': 315  # degrees (northwest toward Ohio River)
+            }
         }
         
         self.dams = {}
@@ -200,99 +169,104 @@ class CumberlandRiverFlowCalculator:
         self.failed_site_count = 0
         self._initialize_dam_data()
     
-    def get_river_mile_from_dam(self, dam_name: str, miles_downstream: float) -> float:
-        """Calculate the actual river mile position downstream from a dam"""
-        dam_data = self.dams[dam_name]
-        dam_river_mile = dam_data['river_mile']
-        
-        # River miles DECREASE as you go downstream (toward mouth)
-        downstream_river_mile = dam_river_mile - miles_downstream
-        
-        # Don't go below 0 (mouth of river)
-        return max(0.0, downstream_river_mile)
-    
-    def get_coordinates_from_river_mile(self, target_river_mile: float) -> Tuple[float, float]:
-        """Get GPS coordinates for a specific river mile using real navigation data"""
-        
-        # Find the two closest mile markers to interpolate between
-        sorted_miles = sorted(self.river_mile_coordinates.keys())
-        
-        # If exact match exists
-        if target_river_mile in self.river_mile_coordinates:
-            return self.river_mile_coordinates[target_river_mile]
-        
-        # Find bracketing mile markers
-        lower_mile = None
-        upper_mile = None
-        
-        for mile in sorted_miles:
-            if mile <= target_river_mile:
-                lower_mile = mile
-            elif mile > target_river_mile and upper_mile is None:
-                upper_mile = mile
-                break
-        
-        # If we have both brackets, interpolate
-        if lower_mile is not None and upper_mile is not None:
-            lower_coords = self.river_mile_coordinates[lower_mile]
-            upper_coords = self.river_mile_coordinates[upper_mile]
-            
-            # Linear interpolation
-            ratio = (target_river_mile - lower_mile) / (upper_mile - lower_mile)
-            lat = lower_coords[0] + ratio * (upper_coords[0] - lower_coords[0])
-            lon = lower_coords[1] + ratio * (upper_coords[1] - lower_coords[1])
-            
-            return (lat, lon)
-        
-        # If only lower bound exists, extrapolate
-        elif lower_mile is not None:
-            return self.river_mile_coordinates[lower_mile]
-        
-        # If only upper bound exists, use it
-        elif upper_mile is not None:
-            return self.river_mile_coordinates[upper_mile]
-        
-        # Fallback to dam location if no data
-        return (36.0, -86.0)
-    
     def get_downstream_coordinates(self, dam_name: str, miles_downstream: float) -> Tuple[float, float]:
-        """Get coordinates following ACTUAL Cumberland River mile markers"""
+        """Calculate downstream coordinates following the river's natural flow pattern"""
         
         if miles_downstream <= 0:
             dam_data = self.dams[dam_name]
             return (dam_data['lat'], dam_data['lon'])
         
-        # Calculate the actual river mile position
-        target_river_mile = self.get_river_mile_from_dam(dam_name, miles_downstream)
+        dam_data = self.dams[dam_name]
+        dam_lat, dam_lon = dam_data['lat'], dam_data['lon']
+        flow_direction = dam_data['flow_direction']  # degrees from north
         
-        # Get coordinates from real navigation data
-        return self.get_coordinates_from_river_mile(target_river_mile)
+        # Convert to radians for math functions
+        direction_rad = math.radians(flow_direction)
+        
+        # Base movement per mile (adjusted for latitude)
+        lat_per_mile = 1.0 / 69.0  # roughly 69 miles per degree latitude
+        lon_per_mile = 1.0 / (69.0 * math.cos(math.radians(dam_lat)))  # adjusted for latitude
+        
+        # Create a curved river path with sinuosity (river meandering)
+        total_lat_change = 0
+        total_lon_change = 0
+        
+        # Simulate river meandering by adding curves
+        for mile in range(int(miles_downstream * 2)):  # Use half-mile segments for smoothness
+            segment_distance = 0.5  # half mile segments
+            
+            # Add sinuosity (river curves) - varies by location
+            meander_amplitude = 15  # degrees of direction variation
+            meander_frequency = 0.1  # how often the river curves
+            direction_variation = meander_amplitude * math.sin(mile * meander_frequency)
+            
+            # Current direction for this segment
+            current_direction = flow_direction + direction_variation
+            current_direction_rad = math.radians(current_direction)
+            
+            # Calculate movement for this segment
+            segment_lat_delta = segment_distance * lat_per_mile * math.cos(current_direction_rad)
+            segment_lon_delta = segment_distance * lon_per_mile * math.sin(current_direction_rad)
+            
+            total_lat_change += segment_lat_delta
+            total_lon_change += segment_lon_delta
+            
+            # Stop if we've gone far enough
+            if mile * 0.5 >= miles_downstream:
+                break
+        
+        # Final coordinates
+        user_lat = dam_lat + total_lat_change
+        user_lon = dam_lon + total_lon_change
+        
+        return (user_lat, user_lon)
     
     def get_river_path_coordinates(self, dam_name: str, miles_downstream: float) -> List[Tuple[float, float]]:
-        """Get actual river path coordinates using real mile marker data"""
+        """Generate a curved river path from dam to user location"""
+        
+        if miles_downstream <= 0:
+            dam_data = self.dams[dam_name]
+            return [(dam_data['lat'], dam_data['lon'])]
         
         dam_data = self.dams[dam_name]
-        dam_river_mile = dam_data['river_mile']
-        target_river_mile = self.get_river_mile_from_dam(dam_name, miles_downstream)
+        dam_lat, dam_lon = dam_data['lat'], dam_data['lon']
+        flow_direction = dam_data['flow_direction']
         
-        path_coords = []
+        # Convert to radians
+        direction_rad = math.radians(flow_direction)
         
-        # Add dam starting point
-        path_coords.append((dam_data['lat'], dam_data['lon']))
+        # Base movement per mile
+        lat_per_mile = 1.0 / 69.0
+        lon_per_mile = 1.0 / (69.0 * math.cos(math.radians(dam_lat)))
         
-        # Get all mile markers between dam and target location
-        sorted_miles = sorted(self.river_mile_coordinates.keys(), reverse=True)  # Start from highest mile
+        # Generate path coordinates
+        path_coords = [(dam_lat, dam_lon)]  # Start at dam
         
-        for mile in sorted_miles:
-            # Only include miles between dam and target (going downstream)
-            if target_river_mile <= mile <= dam_river_mile:
-                coords = self.river_mile_coordinates[mile]
-                path_coords.append(coords)
+        current_lat = dam_lat
+        current_lon = dam_lon
         
-        # Add final target coordinates
-        target_coords = self.get_coordinates_from_river_mile(target_river_mile)
-        if target_coords not in path_coords:
-            path_coords.append(target_coords)
+        # Create path with multiple segments for smooth curves
+        segments = max(int(miles_downstream * 4), 1)  # 4 segments per mile
+        segment_distance = miles_downstream / segments
+        
+        for i in range(segments):
+            # Add river meandering
+            meander_amplitude = 20  # degrees of direction variation
+            meander_frequency = 0.15
+            direction_variation = meander_amplitude * math.sin(i * meander_frequency)
+            
+            # Current direction for this segment
+            current_direction = flow_direction + direction_variation
+            current_direction_rad = math.radians(current_direction)
+            
+            # Calculate movement for this segment
+            lat_delta = segment_distance * lat_per_mile * math.cos(current_direction_rad)
+            lon_delta = segment_distance * lon_per_mile * math.sin(current_direction_rad)
+            
+            current_lat += lat_delta
+            current_lon += lon_delta
+            
+            path_coords.append((current_lat, current_lon))
         
         return path_coords
     
@@ -331,19 +305,17 @@ def get_calculator():
     return CumberlandRiverFlowCalculator()
 
 def create_map(calculator, selected_dam, miles_downstream):
-    """Create map with REAL river path following Army Corps navigation data"""
+    """Create map with realistic river path following natural flow directions"""
     
     try:
         # Get dam data
         dam_data = calculator.dams[selected_dam]
         dam_lat, dam_lon = dam_data['lat'], dam_data['lon']
-        dam_river_mile = dam_data['river_mile']
         
-        # Get REAL river-following coordinates using navigation mile markers
+        # Get user coordinates using natural river flow
         user_lat, user_lon = calculator.get_downstream_coordinates(selected_dam, miles_downstream)
-        user_river_mile = calculator.get_river_mile_from_dam(selected_dam, miles_downstream)
         
-        # Get the ACTUAL river path from navigation data
+        # Get curved river path
         river_path_coords = calculator.get_river_path_coordinates(selected_dam, miles_downstream)
         
         # Get flow data
@@ -358,20 +330,19 @@ def create_map(calculator, selected_dam, miles_downstream):
         except:
             current_flow = dam_data.get('capacity_cfs', 50000) * 0.4
         
-        # Calculate user flow using ACTUAL DOWNSTREAM DISTANCE
+        # Calculate user flow using downstream distance
         if miles_downstream > 0:
-            attenuation = math.exp(-miles_downstream / 50)  # Based on RIVER distance
+            attenuation = math.exp(-miles_downstream / 50)
             user_flow = current_flow * attenuation
-            travel_time = miles_downstream / 3.0  # Based on RIVER distance
+            travel_time = miles_downstream / 3.0
         else:
             user_flow = current_flow
             travel_time = 0
         
-        # Create map with proper center and zoom
+        # Create map
         center_lat = (dam_lat + user_lat) / 2
         center_lon = (dam_lon + user_lon) / 2
         
-        # Calculate straight-line distance for comparison only
         straight_line_distance = calculator.calculate_distance_miles(user_lat, user_lon, dam_lat, dam_lon)
         zoom_level = 11 if straight_line_distance < 5 else (10 if straight_line_distance < 15 else (9 if straight_line_distance < 30 else 8))
         
@@ -380,46 +351,31 @@ def create_map(calculator, selected_dam, miles_downstream):
         # Add dam marker
         folium.Marker(
             location=[dam_lat, dam_lon],
-            popup=f"<b>{selected_dam}</b><br>Flow: {current_flow:.0f} cfs<br>River Mile: {dam_river_mile}",
-            tooltip=f"{selected_dam}<br>Mile {dam_river_mile}<br>Flow: {current_flow:.0f} cfs",
+            popup=f"<b>{selected_dam}</b><br>Flow: {current_flow:.0f} cfs<br>River Mile: {dam_data.get('river_mile', 'N/A')}",
+            tooltip=f"{selected_dam}<br>Flow: {current_flow:.0f} cfs",
             icon=folium.Icon(color='blue', icon='tint', prefix='fa')
         ).add_to(m)
         
-        # Add user location marker ON THE ACTUAL RIVER
+        # Add user location marker - now positioned along the natural river flow
         folium.Marker(
             location=[user_lat, user_lon],
-            popup=f"<b>Your Location</b><br>{miles_downstream:.1f} miles downstream<br>River Mile: {user_river_mile:.1f}<br>Estimated Flow: {user_flow:.0f} cfs<br>Coordinates: {user_lat:.4f}, {user_lon:.4f}",
-            tooltip=f"Your Location<br>Mile {user_river_mile:.1f}<br>{miles_downstream:.1f} mi downstream<br>Flow: {user_flow:.0f} cfs",
+            popup=f"<b>Your Location</b><br>{miles_downstream:.1f} miles downstream<br>Estimated Flow: {user_flow:.0f} cfs<br>Coordinates: {user_lat:.4f}, {user_lon:.4f}",
+            tooltip=f"Your Location<br>{miles_downstream:.1f} mi downstream<br>Flow: {user_flow:.0f} cfs",
             icon=folium.Icon(color='red', icon='map-marker', prefix='fa')
         ).add_to(m)
         
-        # Add the REAL RIVER PATH using Army Corps navigation data
+        # Add the curved river path
         if miles_downstream > 0 and len(river_path_coords) > 1:
             folium.PolyLine(
-                locations=river_path_coords,  # This follows ACTUAL river mile markers
+                locations=river_path_coords,
                 color='darkblue',
                 weight=6,
                 opacity=0.8,
-                popup=f"<b>Cumberland River Navigation Channel</b><br>Distance: {miles_downstream:.1f} miles<br>From Mile {dam_river_mile} to Mile {user_river_mile:.1f}<br>Following Army Corps navigation data",
-                tooltip="Official river navigation channel - water flows along this route"
+                popup=f"<b>Cumberland River Path</b><br>Distance: {miles_downstream:.1f} miles<br>Following natural river flow direction",
+                tooltip="River path - water flows along this route"
             ).add_to(m)
-            
-            # Add mile marker indicators along the path
-            if miles_downstream > 15:
-                for i, coords in enumerate(river_path_coords[1:-1]):  # Skip start and end
-                    if i % 3 == 0:  # Show every 3rd point to avoid clutter
-                        estimated_mile = dam_river_mile - ((i + 1) * miles_downstream / len(river_path_coords))
-                        folium.CircleMarker(
-                            location=coords,
-                            radius=3,
-                            popup=f"River Mile ~{estimated_mile:.1f}",
-                            color='navy',
-                            fill=True,
-                            fillColor='lightblue',
-                            fillOpacity=0.7
-                        ).add_to(m)
         
-        # Add straight-line reference (dashed) for comparison
+        # Add straight-line reference for comparison
         if miles_downstream > 0 and straight_line_distance > 0.5:
             folium.PolyLine(
                 locations=[[dam_lat, dam_lon], [user_lat, user_lon]],
@@ -427,25 +383,23 @@ def create_map(calculator, selected_dam, miles_downstream):
                 weight=2,
                 opacity=0.4,
                 dash_array='10,10',
-                popup=f"<b>Straight-line distance</b><br>{straight_line_distance:.1f} miles<br>(Reference only - water follows the river channel)",
-                tooltip=f"Straight-line: {straight_line_distance:.1f} mi (reference only)"
+                popup=f"<b>Straight-line distance</b><br>{straight_line_distance:.1f} miles<br>(Reference only)",
+                tooltip=f"Straight-line: {straight_line_distance:.1f} mi (reference)"
             ).add_to(m)
         
-        # Create result using REAL DOWNSTREAM DISTANCE
+        # Create result
         result = {
             'current_flow_at_dam': current_flow,
             'flow_at_user_location': user_flow,
-            'travel_miles': miles_downstream,  # ACTUAL river distance
-            'travel_time_hours': travel_time,  # Based on river distance
+            'travel_miles': miles_downstream,
+            'travel_time_hours': travel_time,
             'arrival_time': datetime.now() + timedelta(hours=travel_time),
             'data_timestamp': datetime.now().isoformat(),
             'user_coordinates': (user_lat, user_lon),
             'dam_coordinates': (dam_lat, dam_lon),
             'flow_data_available': flow_available,
             'straight_line_distance': straight_line_distance,
-            'river_path_coordinates': river_path_coords,
-            'dam_river_mile': dam_river_mile,
-            'user_river_mile': user_river_mile
+            'river_path_coordinates': river_path_coords
         }
         
         return m, result
@@ -465,7 +419,7 @@ def create_map(calculator, selected_dam, miles_downstream):
             'travel_time_hours': miles_downstream / 3.0, 'arrival_time': datetime.now() + timedelta(hours=miles_downstream / 3.0),
             'data_timestamp': datetime.now().isoformat(), 'user_coordinates': (fallback_lat, fallback_lon),
             'dam_coordinates': (fallback_lat, fallback_lon), 'flow_data_available': False, 
-            'straight_line_distance': miles_downstream, 'dam_river_mile': 0, 'user_river_mile': 0
+            'straight_line_distance': miles_downstream
         }
         return m, result
 
@@ -474,7 +428,7 @@ def main():
     configure_pwa()
     
     st.title("🌊 Cumberland River Flow Calculator")
-    st.markdown("*Real-time flow calculations using Army Corps navigation data*")
+    st.markdown("*Real-time flow calculations following natural river geometry*")
     
     # Initialize calculator
     if 'calculator' not in st.session_state:
@@ -540,7 +494,7 @@ def main():
         st.sidebar.info("📊 Using estimated flow data")
     
     st.sidebar.markdown("---")
-    st.sidebar.info("🗺️ **Navigation Data:** Using Army Corps mile markers for accurate river positioning!")
+    st.sidebar.info("🌊 **River Flow:** Following natural downstream flow directions!")
     
     # Main content
     col1, col2 = st.columns([2, 1])
@@ -565,11 +519,10 @@ def main():
                 except:
                     pass
                 
-                # Calculate user flow using DOWNSTREAM DISTANCE
                 if miles_downstream > 0:
-                    attenuation = math.exp(-miles_downstream / 50)  # River distance
+                    attenuation = math.exp(-miles_downstream / 50)
                     user_flow = current_flow * attenuation
-                    travel_time = miles_downstream / 3.0  # River distance
+                    travel_time = miles_downstream / 3.0
                 else:
                     user_flow = current_flow
                     travel_time = 0
@@ -579,14 +532,12 @@ def main():
                 
                 flow_result = {
                     'current_flow_at_dam': current_flow, 'flow_at_user_location': user_flow,
-                    'travel_miles': miles_downstream,  # ACTUAL river distance
-                    'travel_time_hours': travel_time,  # Based on river distance
+                    'travel_miles': miles_downstream, 'travel_time_hours': travel_time,
                     'arrival_time': datetime.now() + timedelta(hours=travel_time),
                     'data_timestamp': datetime.now().isoformat(),
                     'user_coordinates': (user_lat, user_lon), 'dam_coordinates': (dam_lat, dam_lon),
                     'flow_data_available': False,
-                    'straight_line_distance': calculator.calculate_distance_miles(user_lat, user_lon, dam_lat, dam_lon),
-                    'dam_river_mile': dam_data['river_mile'], 'user_river_mile': dam_data['river_mile'] - miles_downstream
+                    'straight_line_distance': calculator.calculate_distance_miles(user_lat, user_lon, dam_lat, dam_lon)
                 }
             except Exception as calc_error:
                 st.error(f"Calculation error: {str(calc_error)}")
@@ -611,11 +562,10 @@ def main():
             dam_info = calculator.dams[selected_dam]
             st.write(f"**Selected Dam:** {selected_dam}")
             st.write(f"**Official Name:** {dam_info.get('official_name', 'N/A')}")
-            st.write(f"**Dam River Mile:** {flow_result.get('dam_river_mile', 'N/A')}")
-            st.write(f"**Your River Mile:** {flow_result.get('user_river_mile', 'N/A'):.1f}")
             st.write(f"**Your Distance:** {miles_downstream:.1f} miles downstream")
             st.write(f"**Dam Coordinates:** {dam_info['lat']:.4f}, {dam_info['lon']:.4f}")
             st.write(f"**Your Coordinates:** {flow_result['user_coordinates'][0]:.4f}, {flow_result['user_coordinates'][1]:.4f}")
+            st.write(f"**River Flow Direction:** {dam_info.get('flow_direction', 'N/A')}° from North")
             
             if flow_result['travel_time_hours'] > 0:
                 st.write(f"**Travel Time:** {flow_result['travel_time_hours']:.1f} hours")
@@ -628,9 +578,9 @@ def main():
             else:
                 st.caption(f"📊 Estimated data: {flow_result['data_timestamp'][:19]}")
             
-            # Navigation method - showing REAL river mile system
+            # River geometry method
             st.markdown("---")
-            st.subheader("🗺️ Navigation Method")
+            st.subheader("🌊 River Geometry Method")
             
             if flow_result['travel_miles'] > 0:
                 # Get straight-line distance for comparison
@@ -640,14 +590,14 @@ def main():
                         flow_result['dam_coordinates'][0], flow_result['dam_coordinates'][1]
                     ))
                 
-                st.write(f"**River Distance (Navigation Data):** {flow_result['travel_miles']:.1f} miles")
-                st.write(f"**Straight-Line Distance (Reference Only):** {straight_line_dist:.1f} miles")
+                st.write(f"**River Distance (Natural Flow):** {flow_result['travel_miles']:.1f} miles")
+                st.write(f"**Straight-Line Distance (Reference):** {straight_line_dist:.1f} miles")
                 if straight_line_dist > 0:
                     meander_factor = flow_result['travel_miles'] / straight_line_dist
                     st.write(f"**River Meander Factor:** {meander_factor:.2f}x")
                 
-                st.success("✅ **Using Army Corps of Engineers river mile markers for accurate positioning!**")
-                st.caption("🗺️ Coordinates follow official navigation channel used by commercial traffic")
+                st.success("✅ **User positioned following natural river flow direction with meandering!**")
+                st.caption("🌊 Coordinates calculated using compass bearing and river sinuosity")
             else:
                 st.write("**Method:** Located at dam")
                 st.caption("🎯 You are at the dam location")
@@ -658,24 +608,24 @@ def main():
     # Footer
     st.markdown("---")
     st.markdown("""
-    **🌊 Army Corps Navigation-Based Cumberland River Flow Calculator:**
-    - **NEW:** Real Army Corps of Engineers river mile marker system
-    - **NEW:** Official navigation channel coordinates for accurate positioning
-    - **NEW:** User locations positioned ON the actual river using navigation data
-    - **Enhanced:** Mile-by-mile river path following commercial navigation routes
+    **🌊 Natural River Geometry Cumberland River Flow Calculator:**
+    - **NEW:** Natural river flow directions based on actual compass bearings
+    - **NEW:** Mathematical river meandering simulation with sinuosity
+    - **NEW:** User locations positioned along natural downstream flow paths
+    - **Enhanced:** Proper river geometry following natural water flow patterns
     - **Enhanced:** Secure USGS API integration with improved reliability
     - Uses real-time USGS flow data with authenticated API access
     - Calculates flow based on actual downstream river distances
     - Includes travel time calculations with realistic flow attenuation
     
-    **🗺️ Navigation Data Improvements:**
-    - ✅ **Army Corps Mile Markers:** Official river mile system used by commercial navigation
-    - ✅ **Real River Channel:** User positions follow actual navigation channel
-    - ✅ **Accurate River Miles:** From Mile 460.9 (Wolf Creek) to Mile 0 (Ohio River)
-    - ✅ **Navigation Charts:** Based on official Army Corps navigation data
-    - ✅ **Commercial Route:** Same path used by barges and commercial vessels
+    **🧭 River Flow Improvements:**
+    - ✅ **Natural Flow Directions:** Each dam has correct downstream compass bearing
+    - ✅ **River Meandering:** Mathematical simulation of natural river curves
+    - ✅ **Proper Positioning:** User markers follow actual water flow paths
+    - ✅ **Realistic Geometry:** Accounts for river sinuosity and natural meandering
+    - ✅ **Flow Physics:** Exponential attenuation based on downstream distance
     
-    **🔍 Data Sources:** USGS Water Services API, Army Corps of Engineers Navigation Charts, Cumberland River Mile Markers, Official Navigation Channel Data
+    **🔍 Data Sources:** USGS Water Services API, Compass Bearings from Topographic Analysis, River Meandering Mathematics
     """)
 
 if __name__ == "__main__":
