@@ -270,32 +270,204 @@ class CumberlandRiverFlowCalculator:
         else:
             return dam_miles[-1][2], dam_miles[-1][3]
     
-    def get_river_route(self, dam_lat: float, dam_lon: float, user_lat: float, user_lon: float) -> List[Tuple[float, float]]:
-        """Get actual river route between two points using routing services"""
+    def get_complete_river_path(self, selected_dam: str, user_mile: float) -> Dict:
+        """Get complete river path with proper user positioning"""
+        dam_data = self.dams[selected_dam]
+        dam_mile = dam_data['river_mile']
         
-        # Try BRouter first (specialized for waterways)
+        # First, get the complete Cumberland River geometry for this region
+        complete_river_coords = self._get_regional_river_coordinates(dam_data, user_mile)
+        
+        if complete_river_coords:
+            # Find the actual position of the user on the river path
+            user_coords = self._find_user_position_on_river(complete_river_coords, user_mile, dam_mile)
+            dam_coords = (dam_data['lat'], dam_data['lon'])
+            
+            # Extract the path segment between dam and user
+            river_path = self._extract_path_segment(complete_river_coords, dam_coords, user_coords)
+            
+            return {
+                'user_coordinates': user_coords,
+                'dam_coordinates': dam_coords,
+                'river_path': river_path,
+                'routing_success': True,
+                'method': 'Complete river geometry'
+            }
+        
+        # Fallback to routing services
+        user_lat, user_lon = self.get_coordinates_from_mile(user_mile)
+        dam_lat, dam_lon = dam_data['lat'], dam_data['lon']
+        
+        # Try BRouter first
         river_route = self.river_routing.get_river_route_brouter(dam_lat, dam_lon, user_lat, user_lon)
-        if river_route and len(river_route) > 2:
-            return river_route
+        if river_route and len(river_route) > 5:
+            # Place user on the actual route, not interpolated position
+            user_coords = river_route[-1]  # End of route
+            return {
+                'user_coordinates': user_coords,
+                'dam_coordinates': (dam_lat, dam_lon),
+                'river_path': river_route,
+                'routing_success': True,
+                'method': 'BRouter waterway routing'
+            }
         
-        # Try OpenStreetMap Overpass API
+        # Try OpenStreetMap
         river_route = self.river_routing.get_river_route_overpass(dam_lat, dam_lon, user_lat, user_lon)
-        if river_route and len(river_route) > 2:
-            return river_route
+        if river_route and len(river_route) > 5:
+            user_coords = river_route[-1]
+            return {
+                'user_coordinates': user_coords,
+                'dam_coordinates': (dam_lat, dam_lon),
+                'river_path': river_route,
+                'routing_success': True,
+                'method': 'OpenStreetMap river data'
+            }
         
-        # Fallback to simple line if routing fails
-        st.warning("⚠️ River routing services unavailable - using straight line approximation")
-        return [(dam_lat, dam_lon), (user_lat, user_lon)]
+        # Final fallback
+        st.warning("⚠️ Complete river routing unavailable - using approximation")
+        return {
+            'user_coordinates': (user_lat, user_lon),
+            'dam_coordinates': (dam_lat, dam_lon),
+            'river_path': [(dam_lat, dam_lon), (user_lat, user_lon)],
+            'routing_success': False,
+            'method': 'Linear approximation'
+        }
+    
+    def _get_regional_river_coordinates(self, dam_data: Dict, user_mile: float) -> Optional[List[Tuple[float, float]]]:
+        """Get comprehensive Cumberland River coordinates for the region"""
+        try:
+            # Determine bounding box for the region
+            dam_lat, dam_lon = dam_data['lat'], dam_data['lon']
+            
+            # Expand search area based on distance
+            mile_diff = abs(dam_data['river_mile'] - user_mile)
+            buffer = max(0.2, mile_diff * 0.01)  # Dynamic buffer based on distance
+            
+            min_lat = dam_lat - buffer
+            max_lat = dam_lat + buffer
+            min_lon = dam_lon - buffer
+            max_lon = dam_lon + buffer
+            
+            # Query for all Cumberland River segments in the region
+            overpass_url = "http://overpass-api.de/api/interpreter"
+            
+            query = f"""
+            [out:json][timeout:30];
+            (
+              way["waterway"="river"]["name"~"Cumberland", i]({min_lat},{min_lon},{max_lat},{max_lon});
+              way["waterway"="canal"]["name"~"Cumberland", i]({min_lat},{min_lon},{max_lat},{max_lon});
+              relation["waterway"="river"]["name"~"Cumberland", i]({min_lat},{min_lon},{max_lat},{max_lon});
+            );
+            out geom;
+            """
+            
+            response = requests.post(overpass_url, data=query, timeout=35)
+            if response.status_code == 200:
+                data = response.json()
+                
+                all_coords = []
+                if 'elements' in data:
+                    for element in data['elements']:
+                        if 'geometry' in element:
+                            coords = [(node['lat'], node['lon']) for node in element['geometry']]
+                            all_coords.extend(coords)
+                        elif element['type'] == 'relation' and 'members' in element:
+                            # Handle relations (complex river systems)
+                            for member in element['members']:
+                                if 'geometry' in member:
+                                    coords = [(node['lat'], node['lon']) for node in member['geometry']]
+                                    all_coords.extend(coords)
+                
+                if len(all_coords) > 10:
+                    # Sort coordinates by proximity to create a continuous path
+                    return self._sort_coordinates_by_river_flow(all_coords, dam_data)
+            
+            return None
+            
+        except Exception as e:
+            st.warning(f"Regional river query failed: {str(e)}")
+            return None
+    
+    def _sort_coordinates_by_river_flow(self, coords: List[Tuple[float, float]], dam_data: Dict) -> List[Tuple[float, float]]:
+        """Sort coordinates to follow river flow direction"""
+        if not coords:
+            return coords
+        
+        # Start from the coordinate closest to the dam
+        dam_lat, dam_lon = dam_data['lat'], dam_data['lon']
+        
+        def distance_to_dam(coord):
+            return math.sqrt((coord[0] - dam_lat)**2 + (coord[1] - dam_lon)**2)
+        
+        # Remove duplicates
+        unique_coords = list(set(coords))
+        
+        # Sort by distance from dam to create a rough flow order
+        sorted_coords = sorted(unique_coords, key=distance_to_dam)
+        
+        return sorted_coords
+    
+    def _find_user_position_on_river(self, river_coords: List[Tuple[float, float]], user_mile: float, dam_mile: float) -> Tuple[float, float]:
+        """Find where the user should be positioned along the actual river path"""
+        if not river_coords:
+            return self.get_coordinates_from_mile(user_mile)
+        
+        # Calculate the ratio of distance from dam
+        if user_mile < dam_mile:
+            ratio = (dam_mile - user_mile) / dam_mile
+            # Position user along the river path based on this ratio
+            index = int(ratio * (len(river_coords) - 1))
+            index = max(0, min(index, len(river_coords) - 1))
+            return river_coords[index]
+        else:
+            # User is upstream, use first coordinate
+            return river_coords[0] if river_coords else self.get_coordinates_from_mile(user_mile)
+    
+    def _extract_path_segment(self, complete_coords: List[Tuple[float, float]], 
+                             dam_coords: Tuple[float, float], 
+                             user_coords: Tuple[float, float]) -> List[Tuple[float, float]]:
+        """Extract the river path segment between dam and user"""
+        if not complete_coords:
+            return [dam_coords, user_coords]
+        
+        # Find indices of closest points to dam and user
+        def find_closest_index(target_coord):
+            distances = [math.sqrt((coord[0] - target_coord[0])**2 + (coord[1] - target_coord[1])**2) 
+                        for coord in complete_coords]
+            return distances.index(min(distances))
+        
+        dam_idx = find_closest_index(dam_coords)
+        user_idx = find_closest_index(user_coords)
+        
+        # Ensure correct order (dam to user)
+        start_idx = min(dam_idx, user_idx)
+        end_idx = max(dam_idx, user_idx)
+        
+        # Extract the path segment
+        path_segment = complete_coords[start_idx:end_idx + 1]
+        
+        # Ensure dam and user coordinates are included
+        if path_segment:
+            path_segment[0] = dam_coords
+            path_segment[-1] = user_coords
+        else:
+            path_segment = [dam_coords, user_coords]
+        
+        return path_segment
     
     def calculate_flow_with_timing(self, selected_dam: str, user_mile: float) -> Dict:
-        """Calculate flow rate and arrival time at user location with true river routing"""
+        """Calculate flow rate and arrival time at user location with complete river routing"""
         # Get dam data
         dam_data = self.dams[selected_dam]
         dam_mile = dam_data['river_mile']
         
-        # Get coordinates
-        user_lat, user_lon = self.get_coordinates_from_mile(user_mile)
-        dam_lat, dam_lon = dam_data['lat'], dam_data['lon']
+        # Get complete river routing data
+        with st.spinner("🌊 Mapping complete river path..."):
+            routing_data = self.get_complete_river_path(selected_dam, user_mile)
+        
+        user_lat, user_lon = routing_data['user_coordinates']
+        dam_lat, dam_lon = routing_data['dam_coordinates']
+        river_path = routing_data['river_path']
         
         # Get current flow data
         flow_data = self.get_usgs_flow_data(dam_data['usgs_site'])
@@ -310,10 +482,6 @@ class CumberlandRiverFlowCalculator:
         
         # Calculate travel distance and time
         if user_mile < dam_mile:  # User is downstream
-            # Get actual river route
-            with st.spinner("🌊 Calculating river route..."):
-                river_path = self.get_river_route(dam_lat, dam_lon, user_lat, user_lon)
-            
             # Calculate actual travel distance along river path
             travel_miles = self._calculate_path_distance(river_path)
             travel_time_hours = travel_miles / 3.0  # 3 mph average flow velocity
@@ -328,7 +496,6 @@ class CumberlandRiverFlowCalculator:
             travel_time_hours = 0
             arrival_time = datetime.now()
             flow_at_location = current_flow * 0.5
-            river_path = [(user_lat, user_lon), (dam_lat, dam_lon)]
         
         return {
             'current_flow_at_dam': current_flow,
@@ -341,7 +508,8 @@ class CumberlandRiverFlowCalculator:
             'dam_coordinates': (dam_lat, dam_lon),
             'flow_data_available': flow_data is not None,
             'river_path': river_path,
-            'routing_success': len(river_path) > 2
+            'routing_success': routing_data['routing_success'],
+            'routing_method': routing_data['method']
         }
     
     def _calculate_path_distance(self, path: List[Tuple[float, float]]) -> float:
@@ -611,11 +779,12 @@ def main():
             
             # River routing status
             if flow_result.get('routing_success', False):
-                st.success("🌊 TRUE river path calculated!")
-                st.caption(f"Route has {len(flow_result['river_path'])} coordinate points")
+                st.success("🌊 Complete river path mapped!")
+                st.caption(f"Method: {flow_result.get('routing_method', 'Unknown')}")
+                st.caption(f"Route points: {len(flow_result['river_path'])}")
             else:
                 st.warning("⚠️ Using approximated path")
-                st.caption("River routing services unavailable")
+                st.caption("Complete river data unavailable")
             
             # Details
             st.subheader("ℹ️ Details")
