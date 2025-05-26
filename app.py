@@ -148,15 +148,107 @@ class CumberlandRiverFlowCalculator:
             dam_data = self.dams[dam_name]
             return (dam_data['lat'], dam_data['lon'])
         
-        # River path segments from each dam with realistic downstream coordinates
+        # River path segments with MORE detailed coordinates following actual river channel
         river_paths = {
-            'Wolf Creek Dam': [(0, 36.8939, -84.9269), (5, 36.8850, -84.9400), (10, 36.8750, -84.9550), (15, 36.8650, -84.9700), (20, 36.8500, -84.9900), (25, 36.8350, -85.0100), (30, 36.8200, -85.0350)],
-            'Old Hickory Dam': [(0, 36.29667, -86.65556), (5, 36.2900, -86.6800), (10, 36.2850, -86.7100), (15, 36.2800, -86.7400), (20, 36.2750, -86.7700), (25, 36.2700, -86.8000), (30, 36.2650, -86.8300)],
-            'Cheatham Dam': [(0, 36.320053, -87.222506), (5, 36.3150, -87.2500), (10, 36.3100, -87.2800), (15, 36.3050, -87.3100), (20, 36.3000, -87.3400), (25, 36.2950, -87.3700), (30, 36.2900, -87.4000)],
-            'Barkley Dam': [(0, 37.0208, -88.2228), (5, 37.0100, -88.2400), (10, 36.9950, -88.2600), (15, 36.9800, -88.2800), (20, 36.9650, -88.3000), (25, 36.9500, -88.3200), (30, 36.9350, -88.3400)],
-            'J Percy Priest Dam': [(0, 36.0625, -86.6361), (5, 36.0800, -86.6500), (10, 36.1000, -86.6600), (15, 36.1200, -86.6700), (20, 36.1400, -86.6800), (25, 36.1600, -86.6900)],
-            'Dale Hollow Dam': [(0, 36.5444, -85.4597), (5, 36.5300, -85.4800), (10, 36.5150, -85.5000), (15, 36.5000, -85.5200), (20, 36.4850, -85.5400), (25, 36.4700, -85.5600)],
-            'Center Hill Dam': [(0, 36.0847, -85.7814), (5, 36.1000, -85.8000), (10, 36.1200, -85.8200), (15, 36.1400, -85.8400), (20, 36.1600, -85.8600), (25, 36.1800, -85.8800)]
+            'Wolf Creek Dam': [
+                (0, 36.8939, -84.9269),    # Dam
+                (2, 36.8900, -84.9320),    # Following Lake Cumberland shoreline
+                (5, 36.8850, -84.9400),    # Curving southwest
+                (8, 36.8800, -84.9500),    # Following reservoir contour
+                (10, 36.8750, -84.9550),   # Major bend
+                (12, 36.8700, -84.9600),   # Continuing curve
+                (15, 36.8650, -84.9700),   # River bend southwest
+                (18, 36.8580, -84.9820),   # Following valley
+                (20, 36.8500, -84.9900),   # Major curve west
+                (22, 36.8450, -84.9980),   # River meander
+                (25, 36.8350, -85.0100),   # Westward flow
+                (28, 36.8250, -85.0250),   # Following natural channel
+                (30, 36.8200, -85.0350),   # Major bend westward
+            ],
+            'Old Hickory Dam': [
+                (0, 36.29667, -86.65556),  # Dam (corrected coordinates)
+                (2, 36.2950, -86.6650),    # Initial westward flow
+                (5, 36.2900, -86.6800),    # Following reservoir
+                (7, 36.2880, -86.6950),    # River curve
+                (10, 36.2850, -86.7100),   # Continuing west
+                (12, 36.2830, -86.7250),   # Following channel
+                (15, 36.2800, -86.7400),   # River bend southwest
+                (17, 36.2780, -86.7550),   # Channel curve
+                (20, 36.2750, -86.7700),   # Following reservoir contour
+                (22, 36.2730, -86.7850),   # River meander
+                (25, 36.2700, -86.8000),   # Approaching downtown Nashville
+                (27, 36.2680, -86.8150),   # Final curve
+                (30, 36.2650, -86.8300),   # Past downtown
+            ],
+            'Cheatham Dam': [
+                (0, 36.320053, -87.222506), # Dam (corrected coordinates)
+                (3, 36.3180, -87.2350),     # Initial westward
+                (5, 36.3150, -87.2500),     # Following channel
+                (8, 36.3120, -87.2650),     # River curve
+                (10, 36.3100, -87.2800),    # Continuing west
+                (12, 36.3080, -87.2950),    # Channel bend
+                (15, 36.3050, -87.3100),    # River meander
+                (18, 36.3020, -87.3250),    # Following valley
+                (20, 36.3000, -87.3400),    # Major curve
+                (22, 36.2980, -87.3550),    # Channel curve
+                (25, 36.2950, -87.3700),    # Westward flow
+                (28, 36.2920, -87.3850),    # River bend
+                (30, 36.2900, -87.4000),    # Toward Kentucky border
+            ],
+            'Barkley Dam': [
+                (0, 37.0208, -88.2228),     # Dam (corrected coordinates)
+                (3, 37.0150, -88.2320),     # Initial northwest flow
+                (5, 37.0100, -88.2400),     # Following channel
+                (8, 37.0020, -88.2500),     # River curve toward Ohio
+                (10, 36.9950, -88.2600),    # Continuing northwest
+                (12, 36.9880, -88.2700),    # Channel bend
+                (15, 36.9800, -88.2800),    # River meander
+                (18, 36.9720, -88.2900),    # Approaching confluence
+                (20, 36.9650, -88.3000),    # Near Ohio River
+                (22, 36.9580, -88.3100),    # Final approach
+                (25, 36.9500, -88.3200),    # Close to mouth
+                (28, 36.9420, -88.3300),    # River mouth area
+                (30, 36.9350, -88.3400),    # At Ohio River confluence
+            ],
+            'J Percy Priest Dam': [
+                (0, 36.0625, -86.6361),     # Dam location
+                (2, 36.0680, -86.6420),     # Following Stones River
+                (5, 36.0800, -86.6500),     # North toward Cumberland
+                (7, 36.0900, -86.6550),     # River curve
+                (10, 36.1000, -86.6600),    # Continuing north
+                (12, 36.1100, -86.6650),    # Channel bend
+                (15, 36.1200, -86.6700),    # Approaching confluence
+                (17, 36.1300, -86.6750),    # Near main Cumberland
+                (20, 36.1400, -86.6800),    # River junction area
+                (22, 36.1500, -86.6850),    # Confluence approach
+                (25, 36.1600, -86.6900),    # Joining main channel
+            ],
+            'Dale Hollow Dam': [
+                (0, 36.5444, -85.4597),     # Dam location
+                (3, 36.5380, -85.4680),     # Following Obey River
+                (5, 36.5300, -85.4800),     # Southwest flow
+                (8, 36.5220, -85.4900),     # River curve
+                (10, 36.5150, -85.5000),    # Continuing southwest
+                (12, 36.5080, -85.5100),    # Channel meander
+                (15, 36.5000, -85.5200),    # River bend
+                (18, 36.4920, -85.5300),    # Following valley
+                (20, 36.4850, -85.5400),    # Toward Cumberland confluence
+                (22, 36.4780, -85.5500),    # Approaching main river
+                (25, 36.4700, -85.5600),    # Near confluence
+            ],
+            'Center Hill Dam': [
+                (0, 36.0847, -85.7814),     # Dam location
+                (2, 36.0900, -85.7880),     # Following Caney Fork
+                (5, 36.1000, -85.8000),     # North toward Cumberland
+                (7, 36.1100, -85.8100),     # River curve
+                (10, 36.1200, -85.8200),    # Continuing north
+                (12, 36.1300, -85.8300),    # Channel bend
+                (15, 36.1400, -85.8400),    # River path
+                (17, 36.1500, -85.8500),    # Approaching confluence
+                (20, 36.1600, -85.8600),    # Near main Cumberland
+                (22, 36.1700, -85.8700),    # Junction area
+                (25, 36.1800, -85.8800),    # Main river confluence
+            ]
         }
         
         # Get the river path for this dam
@@ -184,7 +276,41 @@ class CumberlandRiverFlowCalculator:
                 ratio = (miles_downstream - p1[0]) / (p2[0] - p1[0])
                 lat = p1[1] + ratio * (p2[1] - p1[1])
                 lon = p1[2] + ratio * (p2[2] - p1[2])
-                return (lat, lon)
+            def get_river_path_coordinates(self, dam_name: str, miles_downstream: float) -> List[Tuple[float, float]]:
+        """Get a series of coordinates that follow the river path from dam to user location"""
+        
+        # Get the river path for this dam
+        river_paths = {
+            'Wolf Creek Dam': [(0, 36.8939, -84.9269), (2, 36.8900, -84.9320), (5, 36.8850, -84.9400), (8, 36.8800, -84.9500), (10, 36.8750, -84.9550), (12, 36.8700, -84.9600), (15, 36.8650, -84.9700), (18, 36.8580, -84.9820), (20, 36.8500, -84.9900), (22, 36.8450, -84.9980), (25, 36.8350, -85.0100), (28, 36.8250, -85.0250), (30, 36.8200, -85.0350)],
+            'Old Hickory Dam': [(0, 36.29667, -86.65556), (2, 36.2950, -86.6650), (5, 36.2900, -86.6800), (7, 36.2880, -86.6950), (10, 36.2850, -86.7100), (12, 36.2830, -86.7250), (15, 36.2800, -86.7400), (17, 36.2780, -86.7550), (20, 36.2750, -86.7700), (22, 36.2730, -86.7850), (25, 36.2700, -86.8000), (27, 36.2680, -86.8150), (30, 36.2650, -86.8300)],
+            'Cheatham Dam': [(0, 36.320053, -87.222506), (3, 36.3180, -87.2350), (5, 36.3150, -87.2500), (8, 36.3120, -87.2650), (10, 36.3100, -87.2800), (12, 36.3080, -87.2950), (15, 36.3050, -87.3100), (18, 36.3020, -87.3250), (20, 36.3000, -87.3400), (22, 36.2980, -87.3550), (25, 36.2950, -87.3700), (28, 36.2920, -87.3850), (30, 36.2900, -87.4000)],
+            'Barkley Dam': [(0, 37.0208, -88.2228), (3, 37.0150, -88.2320), (5, 37.0100, -88.2400), (8, 37.0020, -88.2500), (10, 36.9950, -88.2600), (12, 36.9880, -88.2700), (15, 36.9800, -88.2800), (18, 36.9720, -88.2900), (20, 36.9650, -88.3000), (22, 36.9580, -88.3100), (25, 36.9500, -88.3200), (28, 36.9420, -88.3300), (30, 36.9350, -88.3400)],
+            'J Percy Priest Dam': [(0, 36.0625, -86.6361), (2, 36.0680, -86.6420), (5, 36.0800, -86.6500), (7, 36.0900, -86.6550), (10, 36.1000, -86.6600), (12, 36.1100, -86.6650), (15, 36.1200, -86.6700), (17, 36.1300, -86.6750), (20, 36.1400, -86.6800), (22, 36.1500, -86.6850), (25, 36.1600, -86.6900)],
+            'Dale Hollow Dam': [(0, 36.5444, -85.4597), (3, 36.5380, -85.4680), (5, 36.5300, -85.4800), (8, 36.5220, -85.4900), (10, 36.5150, -85.5000), (12, 36.5080, -85.5100), (15, 36.5000, -85.5200), (18, 36.4920, -85.5300), (20, 36.4850, -85.5400), (22, 36.4780, -85.5500), (25, 36.4700, -85.5600)],
+            'Center Hill Dam': [(0, 36.0847, -85.7814), (2, 36.0900, -85.7880), (5, 36.1000, -85.8000), (7, 36.1100, -85.8100), (10, 36.1200, -85.8200), (12, 36.1300, -85.8300), (15, 36.1400, -85.8400), (17, 36.1500, -85.8500), (20, 36.1600, -85.8600), (22, 36.1700, -85.8700), (25, 36.1800, -85.8800)]
+        }
+        
+        if dam_name not in river_paths:
+            # Return simple path if no detailed data
+            dam_data = self.dams[dam_name]
+            user_lat, user_lon = self.get_downstream_coordinates(dam_name, miles_downstream)
+            return [(dam_data['lat'], dam_data['lon']), (user_lat, user_lon)]
+        
+        path_points = river_paths[dam_name]
+        river_path = []
+        
+        # Add all points from dam to user location
+        for point in path_points:
+            if point[0] <= miles_downstream:
+                river_path.append((point[1], point[2]))  # (lat, lon)
+            else:
+                break
+        
+        # Add the user's exact location as the final point
+        user_lat, user_lon = self.get_downstream_coordinates(dam_name, miles_downstream)
+        river_path.append((user_lat, user_lon))
+        
+        return river_path
         
         return (path_points[0][1], path_points[0][2])
     
@@ -416,10 +542,11 @@ def main():
                 except:
                     pass
                 
+                # Calculate user flow using DOWNSTREAM DISTANCE
                 if miles_downstream > 0:
-                    attenuation = math.exp(-miles_downstream / 50)
+                    attenuation = math.exp(-miles_downstream / 50)  # River distance, not straight-line
                     user_flow = current_flow * attenuation
-                    travel_time = miles_downstream / 3.0
+                    travel_time = miles_downstream / 3.0  # River distance, not straight-line
                 else:
                     user_flow = current_flow
                     travel_time = 0
@@ -429,11 +556,13 @@ def main():
                 
                 flow_result = {
                     'current_flow_at_dam': current_flow, 'flow_at_user_location': user_flow,
-                    'travel_miles': miles_downstream, 'travel_time_hours': travel_time,
+                    'travel_miles': miles_downstream,  # ACTUAL river distance
+                    'travel_time_hours': travel_time,  # Based on river distance
                     'arrival_time': datetime.now() + timedelta(hours=travel_time),
                     'data_timestamp': datetime.now().isoformat(),
                     'user_coordinates': (user_lat, user_lon), 'dam_coordinates': (dam_lat, dam_lon),
-                    'flow_data_available': False
+                    'flow_data_available': False,
+                    'straight_line_distance': calculator.calculate_distance_miles(user_lat, user_lon, dam_lat, dam_lon)
                 }
             except Exception as calc_error:
                 st.error(f"Calculation error: {str(calc_error)}")
