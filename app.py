@@ -307,15 +307,13 @@ def create_map(calculator, selected_dam, user_mile):
     )
     
     # Add dam marker
-    dam_tooltip = f"""
-    <b>{selected_dam}</b><br>
-    Official Name: {dam_data.get('official_name', 'N/A')}<br>
-    River Mile: {dam_data['river_mile']}<br>
-    Elevation: {dam_data['elevation_ft']:.0f} ft<br>
-    Capacity: {dam_data['capacity_cfs']:,} cfs<br>
-    Current Release: {result['current_flow_at_dam']:.0f} cfs<br>
-    Data Time: {result['data_timestamp'][:19]}
-    """
+    dam_tooltip = f"""<b>{selected_dam}</b><br>
+Official Name: {dam_data.get('official_name', 'N/A')}<br>
+River Mile: {dam_data['river_mile']}<br>
+Elevation: {dam_data['elevation_ft']:.0f} ft<br>
+Capacity: {dam_data['capacity_cfs']:,} cfs<br>
+Current Release: {result['current_flow_at_dam']:.0f} cfs<br>
+Data Time: {result['data_timestamp'][:19]}"""
     
     folium.Marker(
         [dam_lat, dam_lon],
@@ -325,14 +323,12 @@ def create_map(calculator, selected_dam, user_mile):
     ).add_to(m)
     
     # Add user location marker
-    user_tooltip = f"""
-    <b>Your Location</b><br>
-    River Mile: {user_mile}<br>
-    Calculated Flow: {result['flow_at_user_location']:.0f} cfs<br>
-    Travel Distance: {result['travel_miles']:.1f} miles<br>
-    Arrival Time: {result['arrival_time'].strftime('%I:%M %p')}<br>
-    Travel Duration: {result['travel_time_hours']:.1f} hours
-    """
+    user_tooltip = f"""<b>Your Location</b><br>
+River Mile: {user_mile}<br>
+Calculated Flow: {result['flow_at_user_location']:.0f} cfs<br>
+Travel Distance: {result['travel_miles']:.1f} miles<br>
+Arrival Time: {result['arrival_time'].strftime('%I:%M %p')}<br>
+Travel Duration: {result['travel_time_hours']:.1f} hours"""
     
     folium.Marker(
         [user_lat, user_lon],
