@@ -294,12 +294,17 @@ def get_calculator():
     return CumberlandRiverFlowCalculator()
 
 def create_map(calculator, selected_dam, user_mile):
-    """Create map following the previous version's approach"""
+    """Create map with individual mile markers and connecting lines - river mile input version"""
+    
+    # Calculate miles from dam for visualization
+    dam_data = calculator.dams[selected_dam]
+    dam_mile = dam_data['river_mile']
+    miles_from_dam = dam_mile - user_mile if user_mile < dam_mile else 0
+    
     # Calculate flow and get coordinates
     result = calculator.calculate_flow_with_timing(selected_dam, user_mile)
     user_lat, user_lon = result['user_coordinates']
     dam_lat, dam_lon = result['dam_coordinates']
-    dam_data = calculator.dams[selected_dam]
     
     # Create base map centered between dam and user location
     center_lat = (user_lat + dam_lat) / 2
@@ -322,7 +327,7 @@ def create_map(calculator, selected_dam, user_mile):
     ).add_to(m)
     
     # Add user location marker
-    user_tooltip = f"""<b>Your Location</b><br>River Mile: {user_mile}<br>Calculated Flow: {result['flow_at_user_location']:.0f} cfs<br>Travel Distance: {result['travel_miles']:.1f} miles<br>Arrival Time: {result['arrival_time'].strftime('%I:%M %p')}<br>Travel Duration: {result['travel_time_hours']:.1f} hours"""
+    user_tooltip = f"""<b>Your Location</b><br>River Mile: {user_mile:.1f}<br>Miles from Dam: {miles_from_dam:.1f}<br>Calculated Flow: {result['flow_at_user_location']:.0f} cfs<br>Travel Distance: {result['travel_miles']:.1f} miles<br>Arrival Time: {result['arrival_time'].strftime('%I:%M %p')}<br>Travel Duration: {result['travel_time_hours']:.1f} hours"""
     
     folium.Marker(
         [user_lat, user_lon],
@@ -331,13 +336,44 @@ def create_map(calculator, selected_dam, user_mile):
         icon=folium.Icon(color='red', icon='user', prefix='fa')
     ).add_to(m)
     
-    # Add river line between points
-    folium.PolyLine(
-        locations=[[dam_lat, dam_lon], [user_lat, user_lon]],
-        color='lightblue',
-        weight=3,
-        opacity=0.7
-    ).add_to(m)
+    # ADD INDIVIDUAL MILE MARKERS WITH CONNECTING LINES
+    # Generate coordinates for each mile from dam to user location
+    path_coordinates = []
+    path_coordinates.append((dam_lat, dam_lon))  # Start at dam
+    
+    # Add intermediate mile markers (every mile)
+    if miles_from_dam > 0:
+        for i in range(1, int(miles_from_dam) + 1):
+            intermediate_mile = dam_mile - i  # River mile decreases downstream
+            if intermediate_mile >= user_mile:
+                # Get coordinates for this mile marker
+                intermediate_lat, intermediate_lon = calculator.get_coordinates_from_mile(intermediate_mile)
+                path_coordinates.append((intermediate_lat, intermediate_lon))
+                
+                # Add a small marker for this mile
+                if i % 5 == 0 or miles_from_dam <= 10:  # Show marker every 5 miles, or all if short distance
+                    folium.CircleMarker(
+                        [intermediate_lat, intermediate_lon],
+                        radius=3,
+                        popup=f"River Mile {intermediate_mile:.1f}<br>{i} miles from dam",
+                        color='green',
+                        fill=True,
+                        fillColor='lightgreen',
+                        fillOpacity=0.7
+                    ).add_to(m)
+    
+    # Add final user location to path
+    path_coordinates.append((user_lat, user_lon))
+    
+    # Draw connecting lines between all mile markers
+    if len(path_coordinates) > 1:
+        folium.PolyLine(
+            locations=path_coordinates,
+            color='darkblue',
+            weight=4,
+            opacity=0.8,
+            popup=f"River path: {miles_from_dam:.1f} miles from {selected_dam}<br>From Mile {dam_mile} to Mile {user_mile:.1f}"
+        ).add_to(m)
     
     return m, result
 
@@ -368,7 +404,7 @@ def main():
             st.rerun()
         return
 
-    # Sidebar controls - using river mile input like previous version
+    # Sidebar controls - river mile marker input with mile-by-mile visualization
     st.sidebar.header("📍 Location Settings")
     
     # Dam selection
@@ -376,11 +412,11 @@ def main():
     selected_dam = st.sidebar.selectbox(
         "Select Closest Dam:",
         dam_names,
-        index=min(3, len(dam_names)-1),  # Default to Old Hickory Dam
+        index=3 if len(dam_names) > 3 else 0,  # Default to Old Hickory Dam
         help="Choose the dam closest to your location"
     )
     
-    # Mile marker input - THIS IS THE KEY DIFFERENCE
+    # River mile marker input
     dam_mile = calculator.dams[selected_dam]['river_mile']
     user_mile = st.sidebar.number_input(
         "Your River Mile Marker:",
@@ -390,6 +426,9 @@ def main():
         step=0.1,
         help="Enter the river mile marker closest to your location"
     )
+    
+    # Calculate miles from dam for visualization
+    miles_from_dam = dam_mile - user_mile if user_mile < dam_mile else 0
     
     if st.sidebar.button("🔄 Refresh Data", type="primary"):
         st.cache_resource.clear()
@@ -463,7 +502,8 @@ def main():
             st.write(f"**Selected Dam:** {selected_dam}")
             st.write(f"**Official Name:** {dam_info.get('official_name', 'N/A')}")
             st.write(f"**Dam River Mile:** {dam_info['river_mile']}")
-            st.write(f"**Your River Mile:** {user_mile}")
+            st.write(f"**Your River Mile:** {user_mile:.1f}")
+            st.write(f"**Miles from Dam:** {miles_from_dam:.1f}")
             st.write(f"**Dam Coordinates:** {dam_info['lat']:.4f}, {dam_info['lon']:.4f}")
             st.write(f"**Your Coordinates:** {flow_result['user_coordinates'][0]:.4f}, {flow_result['user_coordinates'][1]:.4f}")
             
